@@ -37,8 +37,8 @@ fun (I x) <! (I y) = x < y
 
 datatype 'a LIST = Cons of 'a * 'a LIST | Nil;
 
-fun append xs Nil = xs
-  | append Nil ys = ys
-  | append (Cons (x, xs)) ys = Cons (x, append xs ys);
+fun Append (xs,Nil) = xs
+  | Append (Nil,ys) = ys
+  | Append ((Cons (x, xs)),ys) = Cons (x, Append (xs,ys));
 
 

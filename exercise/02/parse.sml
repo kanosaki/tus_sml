@@ -1,8 +1,11 @@
 
-exception ParseFail
+exception ParseFail of string
 type Src = char list;
 datatype 'a PResult = Ok of ('a*Src) | Fail of (string*Src)
 type 'a Parser = Src -> 'a PResult
+
+fun foldl1 _ nil = raise Empty
+  | foldl1 f (x::xs) = foldl f x xs;
 
 fun >>* ((f1:'a Parser),(f2:'b Parser)) (s:Src) = 
   case f1 s of
@@ -32,49 +35,49 @@ infix 3 >>*
 infix 3 *>>
 infix 2 ||
 
+fun tuple ((p1:'a Parser), (p2:'b Parser)) (f:'a*'b -> 'c) (s:Src) = 
+  case p1 s of
+       Ok(v1, next) =>
+        (case p2 next of
+             Ok(v2, remain) => Ok(f (v1, v2), remain)
+           | Fail(msg, remain) => Fail(msg, s))
+     | Fail(msg, remain) =>Fail(msg, remain)
+
 fun sequence (p:'a Parser) (f:'a list-> 'b) (s:Src) = 
 let 
-  val remain = nil : Src
-  fun inner (Fail(_, re)) r = (r := re; nil)
-    | inner (Ok(v, re)) r = v :: inner (p re) r
-  val result = inner (p s) (ref remain)
+  val remain = ref (nil : Src)
+  fun inner (Fail(_, re)) = (remain := re; nil)
+    | inner (Ok(v, re)) = v :: inner (p re)
+  val result = inner (p s)
 in
   case result of
        nil => Fail("No element ", s)
-     | _   => Ok(f result, remain)
+     | _   => Ok(f result, !remain)
 end;
 
 
 fun many_plus (p:'a Parser) (s:Src) = 
 let 
+  val remain = ref (nil:Src)
   fun result src =
       case p src of
-           Ok(v, re) => (v::result re)
-         | Fail(msg, re) => nil
-  fun remain src = 
-      case p src of
-           Ok(v, re) => remain re
-         | Fail(msg, re) => re
-  val res = result s
-  val r = remain s
+           Ok(v, re) => v::result re
+         | Fail(msg, re) => (remain := re; nil)
 in
-  case res of
+  case result s of
        nil => Fail("No match", s)
-     | _   => Ok(res, r)
+     | xs   => Ok(xs, ! remain)
 end;
 
 fun many_star (p:'a Parser) (s:Src) = 
 let 
+  val remain = ref (nil:Src)
   fun result src =
       case p src of
-           Ok(v, re) => (v::result re)
-         | Fail(msg, re) => nil
-  fun remain src = 
-      case p src of
-           Ok(v, re) => remain re
-         | Fail(msg, re) => re
+           Ok(v, re) => v::result re
+         | Fail(msg, re) => (remain := re; nil)
 in
-  Ok(result s, remain s)
+  Ok(result s, !remain)
 end;
 
 fun PAnyChar nil    = Fail("No char", nil)
@@ -86,8 +89,16 @@ fun PChar (e:char) nil = Fail("Missing "^(str e), nil)
         then Ok(e, s)
         else Fail("Missing "^(str e), (c::s))
 
-
-val PString = sequence PAnyChar implode;
+fun PString (expr:string) (nil:Src) = Fail("Missing "^expr, nil)
+  | PString expr s = 
+  let 
+    val char_parsers = map PChar (rev (explode expr))
+    val parser = foldl1 op*>> char_parsers
+  in
+    case parser s of
+         Ok(_, re) => Ok(expr, re)
+       | Fail(_, re) => Fail("Missing "^expr, re)
+  end
 
 fun PLiteral ((expr:string), value:'a) (s:Src) =
   case PString expr s of
@@ -98,11 +109,11 @@ val PWs = many_star (PChar #" ")
 
 fun PDigit (nil:Src) = Fail("No digit", nil)
   | PDigit (c::s) = 
-  let val n = ord(c) - ord(#"0")
-  in if 0 <= n andalso n <= 9
-     then Ok(n, s)
-     else Fail("Not a digit", (c::s))
-  end
+    let val n = ord(c) - ord(#"0")
+    in if 0 <= n andalso n <= 9
+       then Ok(n, s)
+       else Fail("Not a digit", (c::s))
+    end
 
 fun PUInt (s:Src) = 
 let
@@ -113,28 +124,27 @@ in
      | Fail(msg, remain) => Fail(msg, remain)
 end
 
-fun PInt (s:Src) = 
-let val src = 
+fun PSign (s:Src) = 
     case PChar #"~" s of
-         Ok(_, remain) => (~1, remain)
-       | Fail(_, remain) => (1, remain)
-  val sign = #1 src
-  val body = #2 src
-in
-  case PUInt body of
-       Ok(v, r) => Ok(sign * v, r)
-     | Fail(msg, r) => Fail(msg, r)
-end
+         Ok(_, re) => Ok(~1, re)
+       | Fail(_, re) => Ok(1, re)
 
-val PNumber = PWs >>* PInt *>> PWs
+fun PToken p = PWs >>* p *>> PWs
 
-fun PBracket (b:char, e:char) (p_elem:'a Parser) = 
-  PChar b >>* (many_star ((p_elem *>> PChar #",") || p_elem)) *>> PChar e
+val PInt = tuple (PSign, PUInt) op*
+val PBracketDelim = PWs >>* PChar #"," *>> PWs
 
-fun PList (p_elem:'a Parser) = 
-  PWs >>* (PBracket (#"[", #"]") p_elem || PLiteral ("nil", nil)) *>> PWs
+fun PBracket (p_elem:'a Parser) = 
+  PChar #"[" >>* (many_star (PToken (p_elem *>> PBracketDelim || p_elem))) *>> PChar #"]"
+
+fun PList (p_elem:'a Parser) = PToken (PBracket p_elem || PLiteral ("nil", nil))
+
+val PIntList = PList PInt
 
 val T = PLiteral ("True", true)
 val F = PLiteral ("False", false)
 
-fun parse (p: 'a Parser) (s:string) = p (explode s)
+fun parse (p: 'a Parser) (s:string) = 
+  case p (explode s) of
+       Ok(v, _) => v
+     | Fail(msg, _) => raise ParseFail msg
