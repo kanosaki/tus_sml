@@ -80,6 +80,19 @@ in
   Ok(result s, !remain)
 end;
 
+fun until (p:'a Parser) (s:Src) = 
+let
+  val remain = ref (nil: Src)
+  fun seeker nil = nil 
+    | seeker (c::cs) = 
+        case p (c::cs) of 
+             Ok(v, re) => (remain := (c::cs); nil)
+           | Fail(v, re) => c :: seeker cs
+in
+  Ok(implode (seeker s),! remain)
+end;
+
+
 fun PAnyChar nil    = Fail("No char", nil)
   | PAnyChar (c::s) = Ok(c, s)
 
@@ -89,8 +102,8 @@ fun PChar (e:char) nil = Fail("Missing "^(str e), nil)
         then Ok(e, s)
         else Fail("Missing "^(str e), (c::s))
 
-fun PString (expr:string) (nil:Src) = Fail("Missing "^expr, nil)
-  | PString expr s = 
+fun PExpression (expr:string) (nil:Src) = Fail("Missing "^expr, nil)
+  | PExpression expr s = 
   let 
     val char_parsers = map PChar (rev (explode expr))
     val parser = foldl1 op*>> char_parsers
@@ -101,7 +114,7 @@ fun PString (expr:string) (nil:Src) = Fail("Missing "^expr, nil)
   end
 
 fun PLiteral ((expr:string), value:'a) (s:Src) =
-  case PString expr s of
+  case PExpression expr s of
        Ok(_, remain) => Ok(value, remain)
      | Fail(msg, remain) => Fail(msg, remain)
 
@@ -131,15 +144,18 @@ fun PSign (s:Src) =
 
 fun PToken p = PWs >>* p *>> PWs
 
+val PString = PChar #"\"" >>* until (PChar #"\"") *>> PChar #"\""
+
 val PInt = tuple (PSign, PUInt) op*
 val PBracketDelim = PWs >>* PChar #"," *>> PWs
 
-fun PBracket (p_elem:'a Parser) = 
+fun PBracket p_elem = 
   PChar #"[" >>* (many_star (PToken (p_elem *>> PBracketDelim || p_elem))) *>> PChar #"]"
 
-fun PList (p_elem:'a Parser) = PToken (PBracket p_elem || PLiteral ("nil", nil))
+fun PList p_elem = PToken (PBracket p_elem || PLiteral ("nil", nil))
 
 val PIntList = PList PInt
+val PStringList = PList PString
 
 val T = PLiteral ("True", true)
 val F = PLiteral ("False", false)
