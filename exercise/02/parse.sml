@@ -23,6 +23,14 @@ fun *>> ((f1:'a Parser),(f2:'b Parser)) (s:Src) =
            | Fail(msg, remain) => Fail(msg, s))
      | Fail(msg, remain) =>Fail(msg, remain)
 
+fun >>! ((f1:'a Parser),(f2:'b Parser)) (s:Src) = 
+  case f1 s of
+       Ok(v, next) => 
+        (case f2 next of
+             Ok(_, _) => Fail(">>!", next)
+           | Fail(msg, remain) => Ok(v, next))
+     | Fail(msg, remain) =>Fail(msg, remain)
+
 fun || ((f1:'a Parser),(f2:'a Parser)) (s:Src) = 
   case f1 s of
        Ok(v, next) => Ok(v, next)
@@ -31,9 +39,16 @@ fun || ((f1:'a Parser),(f2:'a Parser)) (s:Src) =
                Ok(v, remain) => Ok(v, remain)
              | Fail(cmsg, remain) => Fail(msg ^ " || " ^ cmsg, remain))
 
+fun ?? ((p:'a Parser),(v:'a)) (s:Src)= 
+  case p s of
+       Ok(va, re) => Ok(va, re)
+     | Fail(_, re) => Ok(v, re)
+
 infix 3 >>*
 infix 3 *>>
+infix 3 >>!
 infix 2 ||
+infix 4 ??
 
 fun tuple ((p1:'a Parser), (p2:'b Parser)) (f:'a*'b -> 'c) (s:Src) = 
   case p1 s of
@@ -43,17 +58,6 @@ fun tuple ((p1:'a Parser), (p2:'b Parser)) (f:'a*'b -> 'c) (s:Src) =
            | Fail(msg, remain) => Fail(msg, s))
      | Fail(msg, remain) =>Fail(msg, remain)
 
-fun sequence (p:'a Parser) (f:'a list-> 'b) (s:Src) = 
-let 
-  val remain = ref (nil : Src)
-  fun inner (Fail(_, re)) = (remain := re; nil)
-    | inner (Ok(v, re)) = v :: inner (p re)
-  val result = inner (p s)
-in
-  case result of
-       nil => Fail("No element ", s)
-     | _   => Ok(f result, !remain)
-end;
 
 
 fun many_plus (p:'a Parser) (s:Src) = 
@@ -92,6 +96,10 @@ in
   Ok(implode (seeker s),! remain)
 end;
 
+fun convert (f:'a -> 'b) (p:'a Parser) (s:Src) = 
+  case p s of
+       Ok(v, re) => Ok(f v, re)
+     | Fail(msg, re) => Fail(msg, re)
 
 fun PAnyChar nil    = Fail("No char", nil)
   | PAnyChar (c::s) = Ok(c, s)
@@ -118,7 +126,7 @@ fun PLiteral ((expr:string), value:'a) (s:Src) =
        Ok(_, remain) => Ok(value, remain)
      | Fail(msg, remain) => Fail(msg, remain)
 
-val PWs = many_star (PChar #" ")
+val PWs = many_star ((PChar #" ") || (PChar #"\n") || (PChar #"\t"))
 
 fun PDigit (nil:Src) = Fail("No digit", nil)
   | PDigit (c::s) = 
@@ -137,18 +145,37 @@ in
      | Fail(msg, remain) => Fail(msg, remain)
 end
 
+
 fun PSign (s:Src) = 
     case PChar #"~" s of
          Ok(_, re) => Ok(~1, re)
        | Fail(_, re) => Ok(1, re)
 
+fun PSign_R (s:Src) = 
+    case PChar #"~" s of
+         Ok(_, re) => Ok(~1.0, re)
+       | Fail(_, re) => Ok(1.0, re)
+
+
+val PInt = tuple (PSign, PUInt) op*
+
+val PUReal = 
+  let 
+    fun dotfold (i, d) = real(i) +
+      (real(d) * Math.pow(0.1, real(ceil(Math.log10(real(d))))))
+    fun efold (v, e) = v * (Math.pow(10.0, real(e))) 
+  val dotreal = (tuple (PUInt ?? 0 , PChar #"." >>* PUInt) dotfold) 
+  in
+    tuple (dotreal || convert real PUInt, ((PChar #"E" || PChar #"e") >>* PInt) ) efold
+  end
+val PReal = tuple (PSign_R, PUReal) op*;
+
+
 fun PToken p = PWs >>* p *>> PWs
 
 val PString = PChar #"\"" >>* until (PChar #"\"") *>> PChar #"\""
 
-val PInt = tuple (PSign, PUInt) op*
-val PBracketDelim = PWs >>* PChar #"," *>> PWs
-
+val PBracketDelim = PToken (PChar #",") 
 fun PBracket p_elem = 
   PChar #"[" >>* (many_star (PToken (p_elem *>> PBracketDelim || p_elem))) *>> PChar #"]"
 

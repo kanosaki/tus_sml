@@ -10,15 +10,6 @@ let
 in until sat imp
 end;
 
-fun newton_d f eps = 
-let 
-  fun until p ch n x  = if p x then (x, n) else until p ch (n+1) (ch x) 
-  fun sat x = Real.abs( f(x) ) < eps
-  fun deriv f x dx = (f(x + dx) - f(x)) / dx
-  fun imp x  = x - (f(x)/(deriv f x eps))
-in until sat imp 0
-end;
-
 fun take_while p nil = nil
   | take_while p (x::xs) = if p x then x::take_while p xs else nil;
 fun drop_while p nil = nil
@@ -45,7 +36,6 @@ fun Append (xs,Nil) = xs
   | Append ((Cons (x, xs)),ys) = Cons (x, Append (xs,ys));
 
 
-
 exception NotANumber
 exception ParseError;
 
@@ -70,17 +60,25 @@ fun conv_int nil = raise NotANumber
     foldfunc (map ctoi expr)
   end
 
-fun parse_cl nil = nil
-  | parse_cl ((#"n")::(#"i")::(#"l")::_) = nil
-  | parse_cl ((#"[")::body) = parse_cl body
-  | parse_cl ((#"]")::_) = nil
-  | parse_cl exprs = 
+fun parse_body nil = nil
+  | parse_body exprs = 
   let 
     val expr = take_to exprs #"," 
-      handle ParseError => take_to exprs #"]"
-    val remain = drop_to exprs #"," 
-      handle ParseError => nil
-  in (conv_int expr) :: parse_cl remain
+      handle ParseError => exprs
+    val islast = (drop_to exprs #","; false) handle ParseError => true
+    val remain = if islast then nil else drop_to exprs #","
+  in
+    if (not islast) andalso remain = nil then raise ParseError else
+    (conv_int expr) :: parse_body remain
   end
 
-fun parse s = parse_cl (explode s)
+fun parse_cl nil = raise ParseError
+  | parse_cl ((#"n")::(#"i")::(#"l")::_) = nil
+  | parse_cl ((#"[")::body) = parse_body (take_to body #"]")
+  | parse_cl _ = raise ParseError 
+  
+
+fun parse s = parse_cl (List.filter (curry (not o op=) #" ") (explode s))
+
+val ** = Math.pow;
+infix 7 **
