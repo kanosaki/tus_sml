@@ -8,7 +8,7 @@ signature PHONE_DB = sig
   val empty      : phonedb
   val add        : KI.item -> VI.item  -> phonedb -> phonedb
   val find       : KI.item -> phonedb -> VI.item
-  val show       : phonedb -> string
+  val show       : phonedb -> unit
 end
 
 functor MkPhoneDB (KItem : ITEM) (VItem : ITEM) : PHONE_DB = 
@@ -23,7 +23,14 @@ struct
           if k = t
             then v
             else find t (PhoneDb db)
-    fun show db = "Not implemented"
+    fun show (PhoneDb nil) = ()
+      | show (PhoneDb ((k,v)::nil)) = 
+          print ((KI.show k)^(" : ")^(VI.show v))
+      | show (PhoneDb ((k,v)::others)) = 
+        (
+          print ((KI.show k)^(" : ")^(VI.show v));
+          print ", "
+        )
   end
 end
 
