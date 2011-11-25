@@ -82,8 +82,8 @@ struct
           if I.isequal v i 
             then cut_node ((Tree(l,v,r)))
             else (if I.isless i v 
-                    then remove i l
-                    else remove i r)
+                    then Tree(remove i l, v, r)
+                    else Tree(l, v, remove i r))
   end 
 end
 

@@ -74,8 +74,8 @@ struct
       if O.compare tk k = 0
         then cut_node (Node(l,(tk,tv),r))
         else (if O.compare k tk < 0
-                then remove k l
-                else remove k r)
+                then Node(remove k l, (tk, tv), r)
+                else Node(l, (tk, tv), remove k r))
   end
 end
 
