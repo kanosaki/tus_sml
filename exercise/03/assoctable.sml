@@ -1,4 +1,5 @@
 exception NotFound
+exception Error
 
 signature OrderdType = sig
   eqtype key
@@ -25,6 +26,56 @@ functor MkListASC (Itemstruct : OrderdType) : ASC = struct
             then av
             else find k (Asc(other))
     fun remove k (Asc(kvs)) = Asc(List.filter (fn (ki,vi) => not ((O.compare ki k) = 0)) kvs)
+  end
+end
+
+functor MkTreeASC (Itemstruct : OrderdType) = 
+struct
+  structure O = Itemstruct
+  abstype 'a t = Leaf | Node of 'a t * (O.key*'a) * 'a t with
+
+    val empty = Leaf
+
+    fun add k v Leaf = Node(Leaf, (k,v), Leaf)
+      | add k v (Node(l,(tk,tv),r)) = 
+        if O.compare k tk < 0
+          then (Node(add k v l,(tk, tv),r))
+          else (if O.compare k tk > 0
+                    then  (Node(l, (tk,tv), add k v r))
+                    else  (Node(l, (tk,tv), r)))
+
+    fun find k Leaf = raise NotFound
+      | find k (Node(l,(tk,tv),r)) = 
+        if O.compare tk k = 0
+          then tv
+          else (if O.compare k tk < 0
+                  then find k l
+                  else find k r)
+  fun cut_node Leaf = Leaf
+    | cut_node (Node(Leaf,_,Leaf)) = Leaf
+    | cut_node (Node(Leaf,_,r)) = r
+    | cut_node (Node(l,_,Leaf)) = l
+    | cut_node (Node(l,v,r)) = 
+      let 
+        fun cut_max Leaf = raise Error
+          | cut_max (Node(cl,cv,Node(nl,nv,Leaf))) = Node(cl,cv,nl)
+          | cut_max (Node(cl,cv,cr)) = Node(cl,cv, cut_max cr)
+        fun max_node Leaf = raise NotFound
+          | max_node (Node(l,v, Leaf)) = Node(l,v,Leaf)
+          | max_node (Node(_,_,r)) = max_node r
+      in
+        case max_node l of
+             Leaf => raise Error
+           | Node(_,v,_) => Node(cut_max l, v, r)
+      end
+
+  fun remove k Leaf = raise NotFound
+    | remove k (Node(l,(tk,tv),r)) = 
+      if O.compare tk k = 0
+        then cut_node (Node(l,(tk,tv),r))
+        else (if O.compare k tk < 0
+                then remove k l
+                else remove k r)
   end
 end
 
