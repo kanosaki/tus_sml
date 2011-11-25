@@ -8,7 +8,7 @@ abstype queue = Queue of string list with
   fun qtop (Queue nil) = raise Empty
     | qtop (Queue (e::l)) = e
   fun qlength (Queue q)= length q 
-  fun show (Queue nil) = ()
-    | show (Queue (t::nil)) = (print t; print "\n")
-    | show (Queue (t::l)) = (print t; print ","; show (Queue l))
+  fun qshow (Queue nil) = ()
+    | qshow (Queue (t::nil)) = (print t; print "\n")
+    | qshow (Queue (t::l)) = (print t; print ","; qshow (Queue l))
 end

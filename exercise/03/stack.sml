@@ -9,11 +9,11 @@ abstype stack = Stack of int list with
     | pop (Stack (t::l)) = (Stack l)
   fun showstack (Stack nil) = ()
     | showstack (Stack (t::nil)) = 
-        (print (Int.toString t) 
+        (print (Int.toString t); 
         print "\n")
     | showstack (Stack (t::l)) = 
-        (print (Int.toString t) 
-         print "," 
+        (print (Int.toString t); 
+         print ","; 
          showstack (Stack l))
 end
   
