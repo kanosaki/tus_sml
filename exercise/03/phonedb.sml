@@ -1,5 +1,6 @@
 
 use "items.sml";
+use "assoctable.sml";
 exception NotFound
 signature PHONE_DB = sig
   structure KI    : ITEM 
@@ -34,4 +35,12 @@ struct
         )
   end
 end
+
+structure StrPDbItem : OrderdType = struct
+  type key = string
+  fun compare (a:string) b = 
+    if a < b 
+      then ~1 
+      else (if a > b then 1 else 0)
+end;
 

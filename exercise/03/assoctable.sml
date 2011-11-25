@@ -8,16 +8,17 @@ end
 
 signature ASC = sig
   structure O : OrderdType
-  type 'a t
-  val empty: 'a t
-  val add: O.key -> 'a -> 'a t -> 'a t
-  val find: O.key -> 'a t -> 'a
-  val remove: O.key -> 'a t -> 'a t
+  type 'a table
+  val empty: 'a table
+  val add: O.key -> 'a -> 'a table -> 'a table
+  val find: O.key -> 'a table -> 'a
+  val remove: O.key -> 'a table -> 'a table
+
 end
 
 functor MkListASC (Itemstruct : OrderdType) : ASC = struct
   structure O = Itemstruct
-  abstype 'a t = Asc of (O.key*'a) list with
+  abstype 'a table = Asc of (O.key*'a) list with
     val empty = Asc(nil)
     fun add k v (Asc(dst)) = Asc((k,v)::dst)
     fun find _ (Asc(nil)) = raise NotFound 
@@ -32,7 +33,7 @@ end
 functor MkTreeASC (Itemstruct : OrderdType) = 
 struct
   structure O = Itemstruct
-  abstype 'a t = Leaf | Node of 'a t * (O.key*'a) * 'a t with
+  abstype 'a table = Leaf | Node of 'a table * (O.key*'a) * 'a table with
 
     val empty = Leaf
 
