@@ -29,7 +29,8 @@ struct
       | show (PhoneDb ((k,v)::others)) = 
         (
           print ((KI.show k)^(" : ")^(VI.show v));
-          print ", "
+          print ", ";
+          show (PhoneDb others)
         )
   end
 end
