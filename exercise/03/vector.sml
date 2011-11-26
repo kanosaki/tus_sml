@@ -3,7 +3,8 @@ abstype vector = Vector of int list with
   exception IndexError
   fun isvempty (Vector v) = v = nil
   fun vector l = Vector l
-  fun at i (Vector v) = List.nth (v, i)
+  fun at i (Vector v) = List.nth (v, i - 1) 
+    handle Subscript => raise Empty
   fun vlength (Vector v) = length v
   fun vshow (Vector nil) = ()
     | vshow (Vector (t::nil)) = 

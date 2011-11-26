@@ -30,5 +30,3 @@ functor MkQueue (Itemstruct : ITEM) : QUEUE = struct
   end
 end
 
-
-structure StringItem = MkQueue(StringItem);

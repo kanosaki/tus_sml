@@ -1,5 +1,5 @@
 
-use "items.sml"
+use "items.sml";
 
 signature VECTOR = sig
   structure I : ITEM
@@ -20,7 +20,8 @@ functor MkVector (Itemstruct : ITEM) : VECTOR = struct
     exception IndexError
     fun isempty (Vector v) = v = nil
     fun vector l = Vector l
-    fun at i (Vector v) = List.nth (v, i)
+    fun at i (Vector v) = List.nth (v, i - 1)
+          handle Subscript => raise Empty
     fun length (Vector v) = List.length v
     fun show (Vector nil) = ()
       | show (Vector (t::nil)) = 
