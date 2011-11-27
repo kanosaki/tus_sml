@@ -67,8 +67,9 @@ struct
       | cut_node (Tree(l,_,Empty)) = l
       | cut_node (Tree(l,v,r)) = 
         let 
-          fun cut_max Empty = raise Error
-            | cut_max (Tree(cl,cv,Tree(nl,nv,Empty))) = Tree(cl,cv,nl)
+          fun cut_max Empty = Empty
+            | cut_max (Tree(lh,_,Empty)) = lh
+            | cut_max (Tree(cl,cv,Tree(nl,nv,Empty))) = Tree(cl,cv,nl) 
             | cut_max (Tree(cl,cv,cr)) = Tree(cl,cv, cut_max cr)
           fun max_node Empty = raise NotFound
             | max_node (Tree(l,v, Empty)) = Tree(l,v,Empty)
@@ -76,7 +77,7 @@ struct
         in
           case max_node l of
                Empty => raise Error
-             | Tree(_,v,_) => Tree(cut_max l, v, r)
+             | Tree(_,nmax,_) => Tree(cut_max l, nmax, r)
         end
 
     fun remove i Empty = raise NotFound
@@ -92,4 +93,7 @@ struct
 end
 
 
-structure IntTree = MkTree (IntTItem);
+structure IT = MkTree (IntTItem); 
+fun foldl_i _ nil = raise Empty 
+  | foldl_i f (x::xs) = foldl f x xs; 
+fun build_tree xs = (foldl_i (op o)  (map IT.insert xs)) IT.empty;
