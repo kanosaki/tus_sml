@@ -8,7 +8,7 @@ signature PHONE_DB = sig
   type phonedb
   val empty      : phonedb
   val add        : KI.item -> VI.item  -> phonedb -> phonedb
-  val find       : KI.item -> phonedb -> VI.item
+  val find       : KI.item -> phonedb  -> VI.item
   val show       : phonedb -> unit
 end
 

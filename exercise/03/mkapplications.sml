@@ -4,14 +4,14 @@ use "titem.sml";
 signature TREE = sig
   structure I : TITEM
   type tree
-  val empty : tree
-  val isempty : tree -> bool
-  val cons : I.titem -> tree -> tree -> tree
-  val leaf : I.titem -> tree
-  val left : tree -> tree
-  val right : tree -> tree
-  val root : tree -> I.titem
-  val show : tree -> char list
+  val empty   : tree
+  val isempty : tree    -> bool
+  val cons    : I.titem -> tree -> tree -> tree
+  val leaf    : I.titem -> tree
+  val left    : tree    -> tree
+  val right   : tree    -> tree
+  val root    : tree    -> I.titem
+  val show    : tree    -> char list
 end
 
 functor MkTree (Itemstruct : TITEM) : TREE = 

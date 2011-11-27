@@ -7,20 +7,20 @@ exception Error
 signature OTREE = sig
   structure I : TITEM
   type tree
-  val empty : tree
-  val isempty : tree -> bool
-  val leaf : I.titem -> tree
-  val left : tree -> tree
-  val right : tree -> tree
-  val root : tree -> I.titem
-  val show : tree -> char list
+  val empty   : tree
+  val isempty : tree    -> bool
+  val leaf    : I.titem -> tree
+  val left    : tree    -> tree
+  val right   : tree    -> tree
+  val root    : tree    -> I.titem
+  val show    : tree    -> char list
 
-  val insert : I.titem -> tree -> tree
-  val remove : I.titem -> tree -> tree
-  val max : tree -> I.titem
-  val min : tree -> I.titem
+  val insert  : I.titem -> tree      -> tree
+  val remove  : I.titem -> tree      -> tree
+  val max     : tree    -> I.titem
+  val min     : tree    -> I.titem
 
-  val trace : tree -> unit
+  val trace   : tree    -> unit
 end
 
 functor MkTree (Itemstruct : TITEM) : OTREE = 

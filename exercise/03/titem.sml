@@ -1,10 +1,10 @@
 
 signature TITEM = sig
   eqtype titem
-  val isequal : titem -> titem -> bool
-  val isless : titem -> titem -> bool
-  val isgreater : titem -> titem -> bool
-  val show : titem -> string
+  val isequal   : titem -> titem  -> bool
+  val isless    : titem -> titem  -> bool
+  val isgreater : titem -> titem  -> bool
+  val show      : titem -> string
 end
 
 structure StringTItem : TITEM = struct
