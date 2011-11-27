@@ -9,18 +9,18 @@ end
 signature ASC = sig
   structure O : OrderdType
   type 'a table
-  val empty: 'a table
-  val add: O.key -> 'a -> 'a table -> 'a table
-  val find: O.key -> 'a table -> 'a
-  val remove: O.key -> 'a table -> 'a table
-
+  val empty  : 'a table
+  val add    : O.key    -> 'a       -> 'a table -> 'a table
+  val find   : O.key    -> 'a table -> 'a
+  val remove : O.key    -> 'a table -> 'a table
 end
 
 functor MkListASC (Itemstruct : OrderdType) : ASC = struct
   structure O = Itemstruct
   abstype 'a table = Asc of (O.key*'a) list with
     val empty = Asc(nil)
-    fun add k v (Asc(dst)) = Asc((k,v)::dst)
+    fun add k v (Asc(dst)) = 
+      Asc((k,v)::(List.filter (fn (x,_) => not (k = x)) dst))
     fun find _ (Asc(nil)) = raise NotFound 
       | find k (Asc((ak,av)::other)) = 
           if (O.compare ak k) = 0 
@@ -58,7 +58,8 @@ struct
     | cut_node (Node(l,_,Leaf)) = l
     | cut_node (Node(l,v,r)) = 
       let 
-        fun cut_max Leaf = raise Error
+        fun cut_max Leaf = Leaf
+          | cut_max (Node(lh,_,Leaf)) = lh
           | cut_max (Node(cl,cv,Node(nl,nv,Leaf))) = Node(cl,cv,nl)
           | cut_max (Node(cl,cv,cr)) = Node(cl,cv, cut_max cr)
         fun max_node Leaf = raise NotFound
@@ -86,3 +87,6 @@ structure IntOItem : OrderdType = struct
 end;
 
 structure ISAsc = MkListASC (IntOItem)
+fun foldl_i _ nil = raise Empty 
+  | foldl_i f (x::xs) = foldl f x xs; 
+fun init_table xs = (foldl_i (op o)  (map (fn (k,v) => ISAsc.add k v) xs)) ISAsc.empty;
