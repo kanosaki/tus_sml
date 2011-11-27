@@ -53,7 +53,9 @@ struct
               val rh = height (right t)
               val lh = height (left t)
             in
-              1 + rh + lh
+              1 + (if rh > lh then rh else lh)
             end)
 end
 
+structure ITree = MkTree (IntTItem)
+structure IApp = MkApplications (ITree)
