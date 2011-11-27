@@ -19,6 +19,8 @@ signature OTREE = sig
   val remove : I.titem -> tree -> tree
   val max : tree -> I.titem
   val min : tree -> I.titem
+
+  val trace : tree -> unit
 end
 
 functor MkTree (Itemstruct : TITEM) : OTREE = 
@@ -84,7 +86,10 @@ struct
             else (if I.isless i v 
                     then Tree(remove i l, v, r)
                     else Tree(l, v, remove i r))
+
+    fun trace t = print ((implode (show t))^"\n")
   end 
 end
+
 
 structure IntTree = MkTree (IntTItem);
