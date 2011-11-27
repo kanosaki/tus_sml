@@ -43,7 +43,7 @@ struct
           then (Node(add k v l,(tk, tv),r))
           else (if O.compare k tk > 0
                     then  (Node(l, (tk,tv), add k v r))
-                    else  (Node(l, (tk,tv), r)))
+                    else  (Node(l, (tk,v), r)))
 
     fun find k Leaf = raise NotFound
       | find k (Node(l,(tk,tv),r)) = 
@@ -90,3 +90,6 @@ structure ISAsc = MkListASC (IntOItem)
 fun foldl_i _ nil = raise Empty 
   | foldl_i f (x::xs) = foldl f x xs; 
 fun init_table xs = (foldl_i (op o)  (map (fn (k,v) => ISAsc.add k v) xs)) ISAsc.empty;
+
+structure Asc = MkTreeASC (IntOItem)
+fun init_table xs = (foldl_i (op o)  (map (fn (k,v) => Asc.add k v) xs)) Asc.empty;
