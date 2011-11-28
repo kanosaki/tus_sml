@@ -52,32 +52,32 @@ struct
           else (if O.compare k tk < 0
                   then find k l
                   else find k r)
-  fun cut_node Leaf = Leaf
-    | cut_node (Node(Leaf,_,Leaf)) = Leaf
-    | cut_node (Node(Leaf,_,r)) = r
-    | cut_node (Node(l,_,Leaf)) = l
-    | cut_node (Node(l,v,r)) = 
-      let 
-        fun cut_max Leaf = Leaf
-          | cut_max (Node(lh,_,Leaf)) = lh
-          | cut_max (Node(cl,cv,Node(nl,nv,Leaf))) = Node(cl,cv,nl)
-          | cut_max (Node(cl,cv,cr)) = Node(cl,cv, cut_max cr)
-        fun max_node Leaf = raise NotFound
-          | max_node (Node(l,v, Leaf)) = Node(l,v,Leaf)
-          | max_node (Node(_,_,r)) = max_node r
-      in
-        case max_node l of
-             Leaf => raise Error
-           | Node(_,v,_) => Node(cut_max l, v, r)
-      end
+    fun cut_node Leaf = Leaf
+      | cut_node (Node(Leaf,_,Leaf)) = Leaf
+      | cut_node (Node(Leaf,_,r)) = r
+      | cut_node (Node(l,_,Leaf)) = l
+      | cut_node (Node(l,v,r)) = 
+        let 
+          fun cut_max Leaf = Leaf
+            | cut_max (Node(lh,_,Leaf)) = lh
+            | cut_max (Node(cl,cv,Node(nl,nv,Leaf))) = Node(cl,cv,nl)
+            | cut_max (Node(cl,cv,cr)) = Node(cl,cv, cut_max cr)
+          fun max_node Leaf = raise NotFound
+            | max_node (Node(l,v, Leaf)) = Node(l,v,Leaf)
+            | max_node (Node(_,_,r)) = max_node r
+        in
+          case max_node l of
+               Leaf => raise Error
+             | Node(_,v,_) => Node(cut_max l, v, r)
+        end
 
-  fun remove k Leaf = raise NotFound
-    | remove k (Node(l,(tk,tv),r)) = 
-      if O.compare tk k = 0
-        then cut_node (Node(l,(tk,tv),r))
-        else (if O.compare k tk < 0
-                then Node(remove k l, (tk, tv), r)
-                else Node(l, (tk, tv), remove k r))
+    fun remove k Leaf = raise NotFound
+      | remove k (Node(l,(tk,tv),r)) = 
+        if O.compare tk k = 0
+          then cut_node (Node(l,(tk,tv),r))
+          else (if O.compare k tk < 0
+                  then Node(remove k l, (tk, tv), r)
+                  else Node(l, (tk, tv), remove k r))
   end
 end
 
