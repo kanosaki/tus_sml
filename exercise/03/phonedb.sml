@@ -37,7 +37,7 @@ struct
   end
 end
 
-structure StrPDbItem : OrderdType = struct
+structure NameItem : OrderdType = struct
   type key = string
   fun compare (a:string) b = 
     if a < b 
