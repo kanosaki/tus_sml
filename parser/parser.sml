@@ -1,8 +1,24 @@
 
-abstype error = Error of (string * (int * int)) with
-  
-end
 
+structure L = Lexer
+structure A = Ast
 
-datatype Result = Ok of Parser | Ng of Parser * Error
+val istream = ref TextIO.stdin
 
+fun getToken () = L.gettoken (!istream)
+val tok = ref (L.ONE "")
+fun advance () = tok := getToken()
+
+exception Syntax_Error
+fun error () = raise Syntax_Error
+
+fun eat t = if (!tok = t) then advance() else error()
+fun eatID () = case !tok of
+                    (L.ID str) => (advance(); str)
+                  | _          => error()
+
+fun eatNUM () = case !tok of 
+                     (L.NUM _) => advance()
+                   | _         => error()
+
+fun parse () = (advance(); P())
