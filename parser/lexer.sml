@@ -66,3 +66,10 @@ structure Lexer = struct
          | _       => token
     end
 end
+structure Ast = struct
+  datatype definition = Def of (string * expr * expr) 
+                      | Expr of expr
+  and expr = Num of int | Var of string | App of expr * expr | Pair of expr * expr
+end
+
+
