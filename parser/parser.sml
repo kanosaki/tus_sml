@@ -26,16 +26,20 @@ fun eatNUM () =
      | _         => error()
 
 fun parse () = (advance(); P()) and
-  P ()=
+  P () =
     case !tok of
-         L.LET => (eat(L.LET);
+         L.LET => (eat(L.LET); 
           let val str = eatID() 
           in 
             (eat(L.BE);
-              let val e1 = E() in (eat (L.IN);
-                let val e2 = E()
-                in (eat(L.ONE ";"); A.Def (str, e1, e2)) end)
+            let val e1 = E() 
+            in 
+              (eat (L.IN);
+              let val e2 = E()
+              in
+                (eat(L.ONE ";"); A.Def (str, e1, e2)) 
               end)
+            end)
           end)
        | _     => let val e = E() in (eat (L.ONE ";"); A.Expr e) end and
   E () = let val t = T() in (E' t) end and

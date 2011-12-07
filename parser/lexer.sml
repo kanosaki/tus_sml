@@ -60,7 +60,7 @@ structure Lexer = struct
       val token = native_token istream 
     in
       case token of 
-           ONE "" => gettoken istream
+           ONE " " => gettoken istream
          | ONE "\t" => gettoken istream
          | ONE "\n" => gettoken istream
          | _       => token
