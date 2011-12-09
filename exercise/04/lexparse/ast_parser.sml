@@ -11,8 +11,8 @@ end
 fun follows t fw = 
 let
   val ret = t()
-  fun inner (f::fs) = (f(); inner fs)
-    | inner _       = ()
+  fun inner nil     = ()
+    | inner (f::fs) = (f(); inner fs)
 in
   (inner fw; ret)
 end
