@@ -128,8 +128,6 @@ fun print_token (ID i)     = (print "ID("; print i; print ")")
            | _    => (print_token rlt; print "\n")
     end)
   end
-
-
 end
 
 structure L = Lexer
