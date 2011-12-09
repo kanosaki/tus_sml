@@ -17,16 +17,8 @@ in
   (inner fw; ret)
 end
 
-fun post pre tgt = 
-let 
-  val pr = pre()
-  val t = tgt()
-in t
-end
-
 fun lazy f (u:unit) = f
 fun eval_three a b c = (a(), b(), c())
-
 
 structure Lexer = struct
   datatype token = INT 
@@ -290,7 +282,7 @@ structure Parser = struct
          L.ID str     => (advance(); A.Var(str))
        | L.NUM num    => (advance(); A.Num(num))
        | L.ONE "("    => middle advance expr (eat_lazy(L.ONE ")"))
-       | L.ONE "-"    => post advance expr
+       | L.ONE "-"    => (advance(); expr())
        | _            => error()
   and cond () = 
     case eval_three expr condop expr of
