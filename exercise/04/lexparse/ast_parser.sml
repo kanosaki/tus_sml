@@ -120,22 +120,22 @@ structure Lexer = struct
        | _        => token
   end
 
-fun print_token (ID i)     = (print "ID("; print i; print ")")
-  | print_token (NUM n)    = (print "NUM("; print (Int.toString n); print ")")
-  | print_token (STRING s) = (print "STRING("; print s; print ")")
-  | print_token (INT)      = print "INT"
-  | print_token (WHILE)    = print "WHILE"
-  | print_token (IF)       = print "IF"
-  | print_token (ELSE)     = print "ELSE"
-  | print_token (SCAN)     = print "SCAN"
-  | print_token (SPRINT)   = print "SPRINT"
-  | print_token (IPRINT)   = print "IPRINT"
-  | print_token (EQ)       = print "EQ"
-  | print_token (NEQ)      = print "NEQ"
-  | print_token (LE)       = print "LE"
-  | print_token (GE)       = print "GE"
-  | print_token (EOF)      = print "EOF"
-  | print_token (ONE c)    = (print "ONE("; print c; print ")")
+  fun print_token (ID i)     = (print "ID("; print i; print ")")
+    | print_token (NUM n)    = (print "NUM("; print (Int.toString n); print ")")
+    | print_token (STRING s) = (print "STRING("; print s; print ")")
+    | print_token (INT)      = print "INT"
+    | print_token (WHILE)    = print "WHILE"
+    | print_token (IF)       = print "IF"
+    | print_token (ELSE)     = print "ELSE"
+    | print_token (SCAN)     = print "SCAN"
+    | print_token (SPRINT)   = print "SPRINT"
+    | print_token (IPRINT)   = print "IPRINT"
+    | print_token (EQ)       = print "EQ"
+    | print_token (NEQ)      = print "NEQ"
+    | print_token (LE)       = print "LE"
+    | print_token (GE)       = print "GE"
+    | print_token (EOF)      = print "EOF"
+    | print_token (ONE c)    = (print "ONE("; print c; print ")")
 
   exception EndOfStream
 
