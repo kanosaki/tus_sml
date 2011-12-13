@@ -1,0 +1,22 @@
+Block[
+    Dec[ a b m n r ]
+    Sprint(String "You must give 2 integers. \n")
+    Sprint(String "First integer: ")
+    Scan(a)
+    Sprint(String "Second integer: ")
+    Scan(b)
+    Def(m,Var a)
+    Def(n,Var b)
+    Def(r,App(Var -,Pair(Var m,App(Var *,Pair(App(Var /,Pair(Var m,Var n)),Var n)))))
+    Def(m,Var n)
+    Def(n,Var r)
+    While(App(Var GT,Pair(Var r,Num 0)),
+        Block[ 
+            NilDec
+            Def(r,App(Var -,Pair(Var m,App(Var *,Pair(App(Var /,Pair(Var m,Var n)),Var n))))) 
+            Def(m,Var n)
+            Def(n,Var r) ]) 
+    Sprint(String "Answer = ")
+    Iprint(Var m) 
+    Sprint(String "\n") 
+]

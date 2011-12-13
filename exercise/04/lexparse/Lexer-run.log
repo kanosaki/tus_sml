@@ -1,0 +1,126 @@
+Standard ML of New Jersey v110.73 [built: Sun Sep 18 22:27:19 2011]
+[opening parser.sml]
+[autoloading]
+[library $SMLNJ-BASIS/basis.cm is stable]
+[autoloading done]
+structure Lexer :
+  sig
+    datatype token
+      = ELSE
+      | EOF
+      | EQ
+      | GE
+      | ID of string
+      | IF
+      | INT
+      | IPRINT
+      | LE
+      | NEQ
+      | NUM of int
+      | ONE of string
+      | SCAN
+      | SPRINT
+      | STRING of string
+      | WHILE
+    val read : TextIO.instream -> string
+    val integer : TextIO.instream -> int -> int
+    val identifier : TextIO.instream -> string -> string
+    val str : TextIO.instream -> string -> string
+    val native_token : TextIO.instream -> token
+    val gettoken : TextIO.instream -> token
+    val print_token : token -> unit
+    exception EndOfStream
+    val run : unit -> unit
+  end
+structure L :
+  sig
+    datatype token
+      = ELSE
+      | EOF
+      | EQ
+      | GE
+      | ID of string
+      | IF
+      | INT
+      | IPRINT
+      | LE
+      | NEQ
+      | NUM of int
+      | ONE of string
+      | SCAN
+      | SPRINT
+      | STRING of string
+      | WHILE
+    val read : TextIO.instream -> string
+    val integer : TextIO.instream -> int -> int
+    val identifier : TextIO.instream -> string -> string
+    val str : TextIO.instream -> string -> string
+    val native_token : TextIO.instream -> token
+    val gettoken : TextIO.instream -> token
+    val print_token : token -> unit
+    exception EndOfStream
+    val run : unit -> unit
+  end
+val istream = ref - : TextIO.instream ref
+val getToken = fn : unit -> Lexer.token
+val tok = ref (ONE "") : Lexer.token ref
+val advance = fn : unit -> unit
+exception SyntaxError
+val error = fn : unit -> 'a
+val eat = fn : Lexer.token -> unit
+val eatID = fn : unit -> unit
+val eatNUM = fn : unit -> unit
+val eatSTR = fn : unit -> unit
+val parse = fn : unit -> unit
+val dec = fn : unit -> unit
+val ids = fn : unit -> unit
+val ids' = fn : unit -> unit
+val stmts = fn : unit -> unit
+val stmt = fn : unit -> unit
+val else_opt = fn : unit -> unit
+val expr = fn : unit -> unit
+val expr' = fn : unit -> unit
+val term = fn : unit -> unit
+val term' = fn : unit -> unit
+val factor = fn : unit -> unit
+val cond = fn : unit -> unit
+val condop = fn : unit -> unit
+- Lexer.run();
+a < 1
+ID(a)
+ONE(<)
+NUM(1)
+b <= 2
+ID(b)
+LE
+NUM(2)
+c >= 3
+ID(c)
+GE
+NUM(3)
+d != 4
+ID(d)
+NEQ
+NUM(4)
+if ( a > 3) { sprint("foo"); }
+IF
+ONE(()
+ID(a)
+ONE(>)
+NUM(3)
+ONE())
+ONE({)
+SPRINT
+ONE(()
+STRING(foo)
+ONE())
+ONE(;)
+ONE(})
+"foobar"
+STRING(foobar)
+123
+NUM(123)
+^D
+uncaught exception EndOfStream
+  raised at: parser.sml:127.28-127.39
+- 
