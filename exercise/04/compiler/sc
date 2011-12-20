@@ -1,0 +1,2 @@
+#!/bin/sh
+sml @SMLload=sc.x86-darwin $* && java Aout

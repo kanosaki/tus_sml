@@ -1,0 +1,36 @@
+{
+    int a,t,f;
+    a = 0;
+    t = 0;
+    f = 0;
+    while(a < 100){
+        if(t == 3){
+            if(f == 5){
+                sprint("FizzBuzz\n");
+                f = 0;
+            }else{
+                sprint("Fizz\n");
+                t = 0;
+            }
+        }
+        if(f == 5){
+            if(t == 3){
+                sprint("FizzBuzz\n");
+                t = 0;
+                f = 0;
+            }else{
+                sprint("Buzz\n");
+                f = 0;
+            }
+        }
+        if(t != 3){
+            if(f != 5){
+                iprint(a);
+                sprint("\n");
+                t = t + 1;
+                f = f + 1;
+            }
+        }
+        a = a + 1;
+    }
+}

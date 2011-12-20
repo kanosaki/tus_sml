@@ -346,11 +346,11 @@ structure Table = struct
   fun nextAddr () = (varAddr := (!varAddr)+1; !varAddr)
 
   val stack = ref 0
-  fun stack_move n = stack := !stack + n
+  fun stack_move n = (stack := ((!stack) + n))
   val maxStack = ref 0
   fun setMaxSize () = 
     if !stack > !maxStack 
-    then maxStack := !stack 
+    then (maxStack := !stack) 
     else ()
   fun stackSize (A.Def(_,e)) = 
         (stackSize_expr e; 
@@ -369,6 +369,7 @@ structure Table = struct
     | stackSize (A.Iprint e)    = 
         (stack_move 1;
          setMaxSize();
+         stackSize_expr(e);
          stack_move ~2)
     | stackSize (A.Scan _) = 
         (stack_move 1;
@@ -377,14 +378,17 @@ structure Table = struct
     | stackSize (A.Sprint e) = 
         (stack_move 1;
          setMaxSize();
+         stackSize_expr e;
          stack_move ~2)
     | stackSize (A.Block (_, ss)) = app stackSize ss
     | stackSize _   = ()
   and stackSize_expr (A.Num _) = (stack_move 1; setMaxSize())
-    | stackSize_expr (A.Var _) = ()
+    | stackSize_expr (A.Var _) = (stack_move 1; setMaxSize())
     | stackSize_expr (A.String _) = (stack_move 1; setMaxSize())
-    | stackSize_expr (A.App (_, e)) = (stackSize_expr e; stack_move ~2)
-    | stackSize_expr (A.Pair (e1, e2)) = (stackSize_expr e1; stackSize_expr e2)
+    | stackSize_expr (A.App (_, e)) = 
+        (stackSize_expr e; stack_move 1;setMaxSize())
+    | stackSize_expr (A.Pair (e1, e2)) = 
+        (stackSize_expr e1; stackSize_expr e2;stack_move ~2)
 
   fun localSize (A.Block (A.Dec l, ss)) = 
       let val n = List.foldl (fn (_,c) => c+1) 0 l in
@@ -451,15 +455,15 @@ structure Emitter = struct
            end
        | A.Sprint s     => 
            (out_m "getstatic java/lang/System/out Ljava/io/PrintStream;";
-            emit_expr s;
-            out_m "invokenonvritual java/io/PrintStream/print(Ljava/lang/String;)V")
+            emit_expr s env;
+            out_m "invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V")
        | A.Iprint e     =>
            (out_m "getstatic java/lang/System/out Ljava/io/PrintStream;";
-            emit_expr e;
-            out_m "invokenonvritual java/io/PrintStream/print(I)V")
+            emit_expr e env;
+            out_m "invokevirtual java/io/PrintStream/print(I)V")
        | A.Scan s       => 
            out_proc [
-              "invokestatic Scan/scan()",
+              "invokestatic Scan/scan()I",
               "istore "^(lookup_var env s)
            ]
        | A.NilStmt      => ()
@@ -505,7 +509,7 @@ structure Emitter = struct
                     end
                 | _          => raise InternalError)
       | A.Pair (e1, e2) => (emit_expr e1 env; emit_expr e2 env)
-      | A.Var s => (out_m ("iload "^(Int.toString(env s)));print "here";0)
+      | A.Var s => (out_m ("iload "^(Int.toString(env s)));0)
       | A.Num s => (out_m ("ldc "^(Int.toString s));0)
       | A.String s => (out_m ("ldc \""^s^"\""); 0)
   fun emit ast localSize stackSize = 
@@ -514,9 +518,9 @@ structure Emitter = struct
     ".super java/lang/Object\n"^
     ".method <init>()V\n"^
     "\t.limit locals 1\n"^
-    "\tlimt stack 1\n"^
+    "\t.limit stack 1\n"^
     "\taload_0\n"^
-    "\tinvokenonvritual java/lang/Object.<init>()V\n"^
+    "\tinvokenonvirtual java/lang/Object.<init>()V\n"^
     "\treturn\n"^
     ".end method\n\n"^
     ".method public static main([Ljava/lang/String;)V\n"^
@@ -573,4 +577,3 @@ fun debug () =
      print "\n--- Java Bytecode:\n";
      Emitter.emit ast (Table.localSize ast + 1) (!Table.maxStack)
    end)
-
