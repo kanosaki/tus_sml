@@ -1,0 +1,95 @@
+Standard ML of New Jersey v110.73 [built: Sun Sep 18 22:27:19 2011]
+[opening ast_parser.sml]
+[autoloading]
+[library $SMLNJ-BASIS/basis.cm is stable]
+[autoloading done]
+val middle = fn : (unit -> 'a) -> (unit -> 'b) -> (unit -> 'c) -> 'b
+val follows = fn : (unit -> 'a) -> (unit -> 'b) list -> 'a
+val lazy = fn : 'a -> unit -> 'a
+val eval_three = fn
+  : (unit -> 'a) -> (unit -> 'b) -> (unit -> 'c) -> 'a * 'b * 'c
+structure Lexer :
+  sig
+    datatype token
+      = ELSE
+      | EOF
+      | EQ
+      | GE
+      | ID of string
+      | IF
+      | INT
+      | IPRINT
+      | LE
+      | NEQ
+      | NUM of int
+      | ONE of string
+      | SCAN
+      | SPRINT
+      | STRING of string
+      | WHILE
+    val read : TextIO.instream -> string
+    val integer : TextIO.instream -> int -> int
+    val identifier : TextIO.instream -> string -> string    val str : TextIO.instream -> string -> string
+    val native_token : TextIO.instream -> token
+    val gettoken : TextIO.instream -> token
+    val print_token : token -> unit
+    exception EndOfStream
+    val run : unit -> unit
+  end
+structure Ast :
+  sig
+    datatype dec = Dec of string list | NilDec
+    datatype stmt
+      = Block of dec * stmt list
+      | Def of string * expr
+      | If of expr * stmt * stmt option
+      | Iprint of expr
+      | NilStmt
+      | Scan of string
+      | Sprint of expr
+      | While of expr * stmt
+    datatype expr
+      = App of expr * expr
+      | Num of int
+      | Pair of expr * expr
+      | String of string
+      | Var of string
+  end
+structure Parser :
+  sig
+    structure L : <sig>
+    structure A : <sig>
+    val istream : TextIO.instream ref
+    val getToken : unit -> Lexer.token
+    val tok : Lexer.token ref
+    val advance : unit -> unit
+    exception SyntaxError
+    val error : unit -> 'a
+    val eat : Lexer.token -> unit
+    val eat_lazy : Lexer.token -> unit -> unit
+    val eatID : unit -> string
+    val eatNUM : unit -> Ast.expr
+    val eatSTR : unit -> Ast.expr
+    val parse : unit -> Ast.stmt
+    val dec : unit -> Ast.dec
+    val ids : unit -> string list
+    val ids' : unit -> string list
+    val stmts : unit -> Ast.stmt list
+    val stmt : unit -> Ast.stmt
+    val else_opt : unit -> Ast.stmt option
+    val expr : unit -> Ast.expr
+    val expr' : Ast.expr -> Ast.expr
+    val term : unit -> Ast.expr
+    val term' : Ast.expr -> Ast.expr
+    val factor : unit -> Ast.expr
+    val cond : unit -> Ast.expr
+    val condop : unit -> Ast.expr
+    val print_dec : Ast.dec -> unit
+    val print_stmt : Ast.stmt -> unit
+    val print_expr : Ast.expr -> unit
+  end
+- Parser.istream := (TextIO.openIn "gcd.sim");
+val it = () : unit
+- Parser.print_stmt(Parser.parse());
+Block[ Dec[ a b m n r ]Sprint(String "You must give 2 integers. \n") Sprint(String "First integer: ") Scan(a) Sprint(String "Second integer: ") Scan(b) Def(m,Var a) Def(n,Var b) Def(r,App(Var -,Pair(Var m,App(Var *,Pair(App(Var /,Pair(Var m,Var n)),Var n))))) Def(m,Var n) Def(n,Var r) While(App(Var GT,Pair(Var r,Num 0)),Block[ NilDecDef(r,App(Var -,Pair(Var m,App(Var *,Pair(App(Var /,Pair(Var m,Var n)),Var n))))) Def(m,Var n) Def(n,Var r) ]) Sprint(String "Answer = ") Iprint(Var m) Sprint(String "\n") ]val it = () : unit
+- 
