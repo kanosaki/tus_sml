@@ -1,5 +1,3 @@
 {
-    int a;
-    scan(a);
-    iprint(a);
+    iprint(2*2^3);
 }

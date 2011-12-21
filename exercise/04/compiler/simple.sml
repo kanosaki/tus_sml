@@ -287,6 +287,11 @@ structure Parser = struct
             let val c_factor = factor() in
               term' (A.App(A.Var("%"), A.Pair(prev_term, c_factor)))
             end)
+       | (L.ONE "^")    =>
+            (advance();
+            let val c_factor = factor() in
+              term' (A.App(A.Var("^"), A.Pair(prev_term, c_factor)))
+            end)
        | _            => prev_term
   and factor () = 
     case !tok of 
@@ -422,6 +427,7 @@ structure Emitter = struct
   fun out_proc ss = app out (map (fn s => "\t"^s^"\n") ss)
   fun out_goto i = out_m ("goto L"^(Int.toString i))
   fun lookup_var env s = Int.toString(env s)
+  val is_emit_power_func = ref false
 
   val label = ref 0
   fun incLabel () = (label := !label + 1; !label)
@@ -489,6 +495,9 @@ structure Emitter = struct
                 | A.Var "/" => (out_m ("idiv");0)
                 | A.Var "!" => (out_m ("ineg");0)
                 | A.Var "%" => (out_m ("irem");0)
+                | A.Var "^" => 
+                    (is_emit_power_func := true;
+                     out_m ("invokestatic Aout/power(II)I");0)
                 | A.Var "EQ" =>
                     let val n = incLabel() in
                       out_m ("if_icmpne L"^Int.toString(n)); n
@@ -518,6 +527,23 @@ structure Emitter = struct
       | A.Var s => (out_m ("iload "^(Int.toString(env s)));0)
       | A.Num s => (out_m ("ldc "^(Int.toString s));0)
       | A.String s => (out_m ("ldc \""^s^"\""); 0)
+  fun emit_power_func () = 
+    (out (
+    ".method static power(II)I\n"^
+        "\t.limit locals 2\n"^
+        "\t.limit stack 2\n\n"^
+        "\tiinc 1 -1\n"^
+        "\tiload_0\n"^
+    "L_START:\n"^
+        "\tiload_0\n"^
+        "\timul\n"^
+        "\tiinc 1 -1\n"^
+        "\tiload_1\n"^
+        "\tifle L_END\n"^
+        "\tgoto L_START\n"^
+    "L_END:\n"^
+        "\tireturn\n"^
+    ".end method\n"))
   fun emit ast localSize stackSize = 
     (out (
     ".class synchronized Aout\n"^
@@ -535,9 +561,13 @@ structure Emitter = struct
     emit_stmt ast T.init;
     out(
     "\treturn\n"^
-    ".end method\n"))
+    ".end method\n");
+    if !is_emit_power_func then emit_power_func() else ())
 
-  fun reset () = (label := 0)
+
+  fun reset () = (
+    label := 0;
+    is_emit_power_func := false)
 end
 (* }}} *)
 
