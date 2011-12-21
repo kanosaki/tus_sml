@@ -1,0 +1,31 @@
+{
+    int a,u;
+    sprint("Enter FizzBuzz upper bound:");
+    scan(u);
+    if(u <= 0){
+        u = 100;
+        sprint("FizzBuzz upper bound has been set to default.\n");
+    }
+    a = 1;
+    while(a < u){
+        if(a % 3 == 0){
+            if(a % 5 == 0){
+                sprint("FizzBuzz\n");
+            }else{
+                sprint("Fizz\n");
+            } 
+        }
+        if(a % 5 == 0){
+            if(a % 3 != 0){
+                sprint("Buzz\n");
+            }
+        }
+        if(a % 5 != 0){
+            if( a % 3 != 0){
+                iprint(a);
+                sprint("\n");
+            }
+        }
+        a = a + 1;
+    }
+}

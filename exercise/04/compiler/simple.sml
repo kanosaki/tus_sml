@@ -282,6 +282,11 @@ structure Parser = struct
             let val c_factor = factor() in
               term' (A.App(A.Var("/"), A.Pair(prev_term, c_factor)))
             end)
+       | (L.ONE "%")    =>
+            (advance();
+            let val c_factor = factor() in
+              term' (A.App(A.Var("%"), A.Pair(prev_term, c_factor)))
+            end)
        | _            => prev_term
   and factor () = 
     case !tok of 
@@ -483,6 +488,7 @@ structure Emitter = struct
                 | A.Var "*" => (out_m ("imul");0)
                 | A.Var "/" => (out_m ("idiv");0)
                 | A.Var "!" => (out_m ("ineg");0)
+                | A.Var "%" => (out_m ("irem");0)
                 | A.Var "EQ" =>
                     let val n = incLabel() in
                       out_m ("if_icmpne L"^Int.toString(n)); n
