@@ -1,3 +1,6 @@
 {
-    iprint(2*2^3);
+    int a;
+    a = 2;
+    a++;
+    iprint(a);
 }

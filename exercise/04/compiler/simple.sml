@@ -216,7 +216,23 @@ structure Parser = struct
     case !tok of
          L.ID str     => 
            (advance(); 
-           A.Def(str, middle (eat_lazy(L.ONE "=")) expr (eat_lazy(L.ONE ";"))))
+           case !tok of
+                (L.ONE "=") =>
+                   A.Def(str, middle (eat_lazy(L.ONE "=")) expr (eat_lazy(L.ONE ";")))
+              | (L.ONE "+") =>
+                  (advance();
+                  case !tok of
+                       (L.ONE "+") => 
+                          (advance();eat(L.ONE ";");
+                           A.Def(str, A.App(A.Var("+"), A.Pair(A.Var(str), A.Num(1)))))
+                     | (L.ONE "=") =>
+                         (advance();
+                         let val r_exp = expr() in
+                           (eat(L.ONE ";"); 
+                           A.Def(str, A.App(A.Var("+"), A.Pair(A.Var(str), r_exp))))
+                         end)
+                     | _ => error())
+              | _ => error())
        | L.IF         => 
            (advance(); 
            let val cnd = middle (eat_lazy(L.ONE "(")) cond (eat_lazy(L.ONE")")) in
