@@ -4,7 +4,7 @@
 
 structure Lexer = struct
   datatype token = INT 
-                 | WHILE 
+                 | WHILE | DO
                  | IF | ELSE 
                  | EQ | GE | LE | NEQ 
                  | SCAN | SPRINT | IPRINT 
@@ -68,6 +68,7 @@ structure Lexer = struct
                    | "sprint" => SPRINT
                    | "iprint" => IPRINT
                    | "scan"   => SCAN
+                   | "do"     => DO
                    | _        => ID (id)
               end
            else if (Char.isDigit v) then NUM(integer istream 0)
@@ -117,6 +118,7 @@ structure Lexer = struct
     | print_token (LE)       = print "LE"
     | print_token (GE)       = print "GE"
     | print_token (EOF)      = print "EOF"
+    | print_token (DO)       = print "DO"
     | print_token (ONE c)    = (print "ONE("; print c; print ")")
 
   exception EndOfStream
@@ -140,6 +142,7 @@ structure Ast = struct
   and     stmt = Def of string * expr 
                | If of expr * stmt * stmt option
                | While of expr * stmt 
+               | Do of stmt * expr
                | Iprint of expr | Sprint of expr
                | Scan of string 
                | Block of dec * stmt list 
@@ -233,6 +236,15 @@ structure Parser = struct
                          end)
                      | _ => error())
               | _ => error())
+       | L.DO         =>
+           (advance();
+           let val st = stmt() in
+             eat(L.WHILE); eat(L.ONE "(");
+             let val ex = cond() in
+               eat(L.ONE ")");
+               A.Do(st, ex)
+             end
+           end)
        | L.IF         => 
            (advance(); 
            let val cnd = middle (eat_lazy(L.ONE "(")) cond (eat_lazy(L.ONE")")) in
@@ -346,6 +358,9 @@ structure Parser = struct
        | A.Sprint s => (print "Sprint("; print_expr s; print ")")
        | A.Iprint i => (print "Iprint("; print_expr i; print ")")
        | A.Scan s => (print "Scan("; print s; print")")
+       | A.Do(s,e) => 
+           (print "Do["; print_stmt s; 
+            print "]\nwhile( "; print_expr e; print " )")
        | A.NilStmt => print "NilStmt"
        | A.Block (d,sl) => 
            (print "Block[ "; print_dec d;
@@ -392,6 +407,9 @@ structure Table = struct
         (stackSize_expr e;
          stack_move ~1;
          stackSize s)
+    | stackSize (A.Do (s,e))    =
+        (stackSize s;
+         stackSize_expr e)
     | stackSize (A.Iprint e)    = 
         (stack_move 1;
          setMaxSize();
@@ -480,6 +498,15 @@ structure Emitter = struct
                out_label j
              end
            end
+       | A.Do (s,e)     =>
+          let val do_start = incLabel() in
+            out_label do_start; (* Start *)
+            emit_stmt s env;
+            let val do_end = emit_expr e env in
+              out_goto do_start;
+              out_label do_end
+            end
+          end
        | A.Sprint s     => 
            (out_m "getstatic java/lang/System/out Ljava/io/PrintStream;";
             emit_expr s env;
