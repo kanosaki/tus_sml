@@ -4,7 +4,7 @@
 
 structure Lexer = struct
   datatype token = INT 
-                 | WHILE | DO
+                 | WHILE | DO | FOR
                  | IF | ELSE 
                  | EQ | GE | LE | NEQ 
                  | SCAN | SPRINT | IPRINT 
@@ -68,6 +68,7 @@ structure Lexer = struct
                    | "sprint" => SPRINT
                    | "iprint" => IPRINT
                    | "scan"   => SCAN
+                   | "for"    => FOR
                    | "do"     => DO
                    | _        => ID (id)
               end
@@ -119,6 +120,7 @@ structure Lexer = struct
     | print_token (GE)       = print "GE"
     | print_token (EOF)      = print "EOF"
     | print_token (DO)       = print "DO"
+    | print_token (FOR)      = print "FOR"
     | print_token (ONE c)    = (print "ONE("; print c; print ")")
 
   exception EndOfStream
@@ -142,6 +144,7 @@ structure Ast = struct
   and     stmt = Def of string * expr 
                | If of expr * stmt * stmt option
                | While of expr * stmt 
+               | For of string * int * int * stmt
                | Do of stmt * expr
                | Iprint of expr | Sprint of expr
                | Scan of string 
@@ -245,6 +248,22 @@ structure Parser = struct
                A.Do(st, ex)
              end
            end)
+       | L.FOR        => 
+           (advance(); eat(L.ONE "(");
+            let val loop_var = eatID() in
+              eat(L.ONE ",");
+              let val for_start = eatNUM() in
+                eat(L.ONE ",");
+                let val for_end = eatNUM() in
+                  eat(L.ONE ")");
+                  let val for_stmt = stmt() in
+                    case (for_start, for_end) of
+                         (A.Num b, A.Num e) => A.For(loop_var, b, e, for_stmt)
+                       | _  => error()
+                  end
+                end
+              end
+            end)
        | L.IF         => 
            (advance(); 
            let val cnd = middle (eat_lazy(L.ONE "(")) cond (eat_lazy(L.ONE")")) in
@@ -360,7 +379,10 @@ structure Parser = struct
        | A.Scan s => (print "Scan("; print s; print")")
        | A.Do(s,e) => 
            (print "Do["; print_stmt s; 
-            print "]\nwhile( "; print_expr e; print " )")
+            print "] while( "; print_expr e; print " )")
+       | A.For(v,b,e,st) => 
+           (print ("for("^v^","^Int.toString(b)^","^Int.toString(e)^") ");
+            print_stmt st)
        | A.NilStmt => print "NilStmt"
        | A.Block (d,sl) => 
            (print "Block[ "; print_dec d;
@@ -410,6 +432,14 @@ structure Table = struct
     | stackSize (A.Do (s,e))    =
         (stackSize s;
          stackSize_expr e)
+    | stackSize (A.For (_,_,_,st)) =
+        (stack_move 1;
+         setMaxSize();
+         stack_move ~1;
+         stackSize st;
+         stack_move 2;
+         setMaxSize();
+         stack_move ~2)
     | stackSize (A.Iprint e)    = 
         (stack_move 1;
          setMaxSize();
@@ -434,13 +464,18 @@ structure Table = struct
     | stackSize_expr (A.Pair (e1, e2)) = 
         (stackSize_expr e1; stackSize_expr e2;stack_move ~2)
 
-  fun localSize (A.Block (A.Dec l, ss)) = 
-      let val n = List.foldl (fn (_,c) => c+1) 0 l in
+  fun localSize (A.Block (decs, ss)) = 
+      let val n = case decs of
+                       A.Dec l => List.foldl (fn (_,c) => c+1) 0 l 
+                     | NilDec  => 0 
+      in
         List.foldl (fn (s,c) => c + localSize s) n ss 
       end
     | localSize (A.If (_, s1, s2)) = 
         (localSize s1) + (case s2 of SOME s => localSize s | NONE => 0)
     | localSize (A.While (_, s))   = localSize s
+    | localSize (A.Do (s,_)) = localSize s
+    | localSize (A.For(_,_,_,s)) = 1 + (localSize s)
     | localSize _   = 0
 
   fun reset () = (varAddr := 0; stack := 0; maxStack := 0)
@@ -507,6 +542,19 @@ structure Emitter = struct
               out_label do_end
             end
           end
+       | A.For(var,beg,en,st) =>
+           (let val env' = (env var;env) 
+                  handle NoDeclaration => emit_dec (A.Dec([var])) env in
+              emit_stmt (A.Def(var, A.Num(beg))) env';
+              let val for_start_label = incLabel() in
+                out_label for_start_label;
+                emit_stmt st env';
+                out_m ("iinc "^(lookup_var env' var)^" 1");
+                out_m ("iload "^(lookup_var env' var));
+                out_m ("ldc "^Int.toString(en));
+                out_m ("if_icmple L"^Int.toString(for_start_label))
+              end
+            end)
        | A.Sprint s     => 
            (out_m "getstatic java/lang/System/out Ljava/io/PrintStream;";
             emit_expr s env;
@@ -599,7 +647,7 @@ structure Emitter = struct
     "\treturn\n"^
     ".end method\n\n"^
     ".method public static main([Ljava/lang/String;)V\n"^
-    "\t.limit locals "^(Int.toString localSize)^"\n"^
+    "\t.limit locals "^(Int.toString (localSize))^"\n"^
     "\t.limit stack "^(Int.toString stackSize)^"\n");
     emit_stmt ast T.init;
     out(
