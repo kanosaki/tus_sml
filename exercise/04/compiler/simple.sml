@@ -1,7 +1,9 @@
 
+fun $ (x,y) = x y
+infixr 0 $
+
 (*{{{ *) (* }}} *)
 (* Lexer {{{ *)
-
 structure Lexer = struct
   datatype token = INT 
                  | WHILE | DO | FOR
@@ -13,7 +15,9 @@ structure Lexer = struct
                  | STRING of string 
                  | ONE of string 
                  | EOF
+  datatype pack = Pack of token * int
 
+  val current_line = ref 0
 
   fun read istream = 
     case TextIO.input1 istream of
@@ -94,34 +98,39 @@ structure Lexer = struct
              end)
            else ONE (read istream)
   end
-
   and gettoken istream =
-  let val token = native_token istream in
-    case token of 
-         ONE " "  => gettoken istream
-       | ONE "\t" => gettoken istream
-       | ONE "\n" => gettoken istream
-       | _        => token
-  end
+      let val token = native_token istream in
+        case token of 
+             ONE " "  => gettoken istream
+           | ONE "\t" => gettoken istream
+           | ONE "\n" => (current_line := !current_line + 1; gettoken istream)
+           | _        => token
+      end
+  and getpack istream = 
+      let val tok = gettoken istream in
+        (tok, !current_line)
+      end
 
-  fun print_token (ID i)     = (print "ID("; print i; print ")")
-    | print_token (NUM n)    = (print "NUM("; print (Int.toString n); print ")")
-    | print_token (STRING s) = (print "STRING("; print s; print ")")
-    | print_token (INT)      = print "INT"
-    | print_token (WHILE)    = print "WHILE"
-    | print_token (IF)       = print "IF"
-    | print_token (ELSE)     = print "ELSE"
-    | print_token (SCAN)     = print "SCAN"
-    | print_token (SPRINT)   = print "SPRINT"
-    | print_token (IPRINT)   = print "IPRINT"
-    | print_token (EQ)       = print "EQ"
-    | print_token (NEQ)      = print "NEQ"
-    | print_token (LE)       = print "LE"
-    | print_token (GE)       = print "GE"
-    | print_token (EOF)      = print "EOF"
-    | print_token (DO)       = print "DO"
-    | print_token (FOR)      = print "FOR"
-    | print_token (ONE c)    = (print "ONE("; print c; print ")")
+  fun inspect (ID i)     = ("ID(" ^ i ^  ")")
+    | inspect (NUM n)    = ("NUM("^ (Int.toString n)^ ")")
+    | inspect (STRING s) = ("STRING("^ s^ ")")
+    | inspect (INT)      = "INT"
+    | inspect (WHILE)    = "WHILE"
+    | inspect (IF)       = "IF"
+    | inspect (ELSE)     = "ELSE"
+    | inspect (SCAN)     = "SCAN"
+    | inspect (SPRINT)   = "SPRINT"
+    | inspect (IPRINT)   = "IPRINT"
+    | inspect (EQ)       = "EQ"
+    | inspect (NEQ)      = "NEQ"
+    | inspect (LE)       = "LE"
+    | inspect (GE)       = "GE"
+    | inspect (EOF)      = "EOF"
+    | inspect (DO)       = "DO"
+    | inspect (FOR)      = "FOR"
+    | inspect (ONE c)    = ("ONE("^ c^ ")")
+
+  fun print_token t = print $ inspect t
 
   exception EndOfStream
 
@@ -137,6 +146,31 @@ structure Lexer = struct
   end
 end
  (* }}} *)
+
+(* Source {{{ *) 
+structure Source = struct
+  structure L = Lexer
+  exception Error
+  (* source stream , pre tokens , post tokens(usually nil) *)
+  datatype source = Src of TextIO.instream * (L.token*int) list * (L.token*int) list
+
+  fun next (Src(is, pre, po::posts)) = (po, Src(is, po::pre, posts))
+    | next (Src(is, pre, nil)) = 
+      let val tok = L.getpack is in
+          (tok, Src(is, tok::pre, nil))
+      end
+  fun advance s = 
+        case next s of
+             (_, nex) => nex
+  fun getCurrent (Src(_,p::pre,_)) = p
+    | getCurrent _ = raise Error
+
+  fun back (Src(is, nil, post)) = raise Error 
+    | back (Src(is, (p::pre), post)) = Src(is, pre, p::post)
+  fun init is = Src(is, nil, nil)
+
+end
+(* }}} *)
 
 (* Ast {{{ *) 
 structure Ast = struct
@@ -157,6 +191,44 @@ structure Ast = struct
                | App of expr * expr
                | Neg of expr
                | Pair of expr * expr
+
+  fun inspect_dec d =
+    case d of 
+         Dec sl => 
+            ( "Dec[ "^
+            (foldl (fn (s,p) => (p^s^" ")) "" sl) ^ "]") 
+       | NilDec =>  "NilDec "
+  and inspect_stmt s = 
+    case s of
+         Def (s,e) => ( "Def("^s^","^inspect_expr e^")")
+       | If (c,s,opt) =>
+           ("If("^ inspect_expr c^","^inspect_stmt s^","^
+            (case opt of 
+                 SOME s2 => inspect_stmt s2 
+               | NONE =>  ")"))
+       | While (c,s) => ( "While("^inspect_expr c^","^ inspect_stmt s^")")
+       | Sprint s => ( "Sprint("^inspect_expr s^")")
+       | Iprint i => ( "Iprint("^inspect_expr i^")")
+       | Scan s => ( "Scan("^s^")")
+       | Do(s,e) => 
+           ( "Do["^inspect_stmt s^ 
+             "] while( "^inspect_expr e^" )")
+       | For(v,b,e,st) => 
+         ( ("for("^v^","^Int.toString(b)^","^Int.toString(e)^") ")^
+          inspect_stmt st)
+       | NilStmt =>  "NilStmt"
+       | Block (d,sl) => 
+           ( "Block[ "^ inspect_dec d^
+            (foldl (fn (s,p) => (p^inspect_stmt s^" ")) "" sl)^  "]")
+  and inspect_expr x = 
+    case x of 
+         Var s => ( "Var "^  s)
+       | App(e1,e2) => ( "App("^ inspect_expr e1^  ","^ inspect_expr e2^  ")")
+       | Pair(e1,e2) => ( "Pair("^ inspect_expr e1^  ","^ inspect_expr e2^  ")")
+       | Num n => ( "Num "^  (Int.toString(n)))
+       | String s => ( "String \""^  s^  "\" ")
+       | Neg e    => ( "Neg["^ inspect_expr e^  "] ")
+       | Inc s    => ( s^  "++ ")
 end
 (* }}} *)
 
@@ -371,6 +443,7 @@ structure Parser = struct
        | L.GE      => (advance(); A.Var("GE"))
        | L.LE      => (advance(); A.Var("LE"))
        | _         => error "Unknown conditions operator"
+
   fun print_dec d =
     case d of 
          Ast.Dec sl => 
@@ -408,11 +481,8 @@ structure Parser = struct
        | A.String s => (print "String \""; print s; print "\" ")
        | A.Neg e    => (print "Neg["; print_expr e; print "] ")
        | A.Inc s    => (print s; print "++ ")
-
 end
-(* }}} *)
 
-(* Table {{{ *) 
 structure Table = struct
   structure A = Ast
   structure L = Lexer
