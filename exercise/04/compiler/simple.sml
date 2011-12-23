@@ -444,43 +444,9 @@ structure Parser = struct
        | L.LE      => (advance(); A.Var("LE"))
        | _         => error "Unknown conditions operator"
 
-  fun print_dec d =
-    case d of 
-         Ast.Dec sl => 
-            (print "Dec[ ";
-            map (fn s => (print s; print " ")) sl;print "]") 
-       | Ast.NilDec => print "NilDec "
-  and print_stmt s = 
-    case s of
-         A.Def (s,e) => (print "Def("; print s; print ","; print_expr e; print")")
-       | A.If (c,s,opt) =>
-           (print "If("; print_expr c; print ","; print_stmt s; print ",";
-            case opt of 
-                 SOME s2 => print_stmt s2 
-               | NONE => () ; print ")")
-       | A.While (c,s) => (print "While("; print_expr c; print ","; print_stmt s; print ")")
-       | A.Sprint s => (print "Sprint("; print_expr s; print ")")
-       | A.Iprint i => (print "Iprint("; print_expr i; print ")")
-       | A.Scan s => (print "Scan("; print s; print")")
-       | A.Do(s,e) => 
-           (print "Do["; print_stmt s; 
-            print "] while( "; print_expr e; print " )")
-       | A.For(v,b,e,st) => 
-           (print ("for("^v^","^Int.toString(b)^","^Int.toString(e)^") ");
-            print_stmt st)
-       | A.NilStmt => print "NilStmt"
-       | A.Block (d,sl) => 
-           (print "Block[ "; print_dec d;
-            map (fn x => (print_stmt x; print " ")) sl; print "]")
-  and print_expr x = 
-    case x of 
-         A.Var s => (print "Var "; print s)
-       | A.App(e1,e2) => (print "App("; print_expr e1; print ","; print_expr e2; print ")")
-       | A.Pair(e1,e2) => (print "Pair("; print_expr e1; print ","; print_expr e2; print ")")
-       | A.Num n => (print "Num "; print (Int.toString(n)))
-       | A.String s => (print "String \""; print s; print "\" ")
-       | A.Neg e    => (print "Neg["; print_expr e; print "] ")
-       | A.Inc s    => (print s; print "++ ")
+  val print_dec = print o A.inspect_dec
+  val print_stmt = print o A.inspect_stmt
+  val print_expr = print o A.inspect_expr
 end
 
 structure Table = struct
