@@ -152,9 +152,12 @@ structure Ast = struct
                | NilStmt
   and     expr = Num of int 
                | Var of string
+               | Inc of string
                | String of string
                | App of expr * expr
+               | Neg of expr
                | Pair of expr * expr
+               
 end
 (* }}} *)
 
@@ -228,10 +231,10 @@ structure Parser = struct
               | (L.ONE "+") =>
                   (advance();
                   case !tok of
-                       (L.ONE "+") => 
+                       (*(L.ONE "+") => 
                           (advance();eat(L.ONE ";");
                            A.Def(str, A.App(A.Var("+"), A.Pair(A.Var(str), A.Num(1)))))
-                     | (L.ONE "=") =>
+                     |*) (L.ONE "=") =>
                          (advance();
                          let val r_exp = expr() in
                            (eat(L.ONE ";"); 
@@ -342,10 +345,17 @@ structure Parser = struct
        | _            => prev_term
   and factor () = 
     case !tok of 
-         L.ID str     => (advance(); A.Var(str))
+         L.ID str     => (advance(); 
+            case !tok of
+                 (L.ONE "+") => (advance();
+                 case !tok of 
+                      (L.ONE "+") => (advance();
+                      A.Inc(str))
+                    | _ => error())
+                | _ => A.Var(str))
        | L.NUM num    => (advance(); A.Num(num))
        | L.ONE "("    => middle advance expr (eat_lazy(L.ONE ")"))
-       | L.ONE "-"    => (advance(); expr())
+       | L.ONE "-"    => (advance(); A.Neg(expr()))
        | _            => error()
   and cond () = 
     case eval_three expr condop expr of
@@ -393,7 +403,9 @@ structure Parser = struct
        | A.App(e1,e2) => (print "App("; print_expr e1; print ","; print_expr e2; print ")")
        | A.Pair(e1,e2) => (print "Pair("; print_expr e1; print ","; print_expr e2; print ")")
        | A.Num n => (print "Num "; print (Int.toString(n)))
-       | A.String s => (print "String \""; print s; print "\"")
+       | A.String s => (print "String \""; print s; print "\" ")
+       | A.Neg e    => (print "Neg["; print_expr e; print "] ")
+       | A.Inc s    => (print s; print "++ ")
 
 end
 (* }}} *)
@@ -463,6 +475,8 @@ structure Table = struct
         (stackSize_expr e; stack_move 1;setMaxSize())
     | stackSize_expr (A.Pair (e1, e2)) = 
         (stackSize_expr e1; stackSize_expr e2;stack_move ~2)
+    | stackSize_expr (A.Inc s) = ()
+    | stackSize_expr (A.Neg e) = stackSize_expr e
 
   fun localSize (A.Block (decs, ss)) = 
       let val n = case decs of
@@ -618,6 +632,8 @@ structure Emitter = struct
       | A.Var s => (out_m ("iload "^(Int.toString(env s)));0)
       | A.Num s => (out_m ("ldc "^(Int.toString s));0)
       | A.String s => (out_m ("ldc \""^s^"\""); 0)
+      | A.Neg e => (emit_expr e env; out_m "ineg";0)
+      | A.Inc s => (emit_expr (A.Var s) env; out_m ("iconst_1");out_m("iadd");0)
   fun emit_power_func () = 
     (out (
     ".method static power(II)I\n"^
