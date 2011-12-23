@@ -486,70 +486,83 @@ end
 structure Table = struct
   structure A = Ast
   structure L = Lexer
-  exception NoDeclaration
-  val init  = fn x => raise NoDeclaration
-  fun update v offset env = fn x => if v = x then offset else env x
-  val varAddr = ref 0
-  fun nextAddr () = (varAddr := (!varAddr)+1; !varAddr)
+  exception NoDeclaration of string
+  datatype entry = Entry of int * string
+ 
+  val init = nil : entry list
 
-  val stack = ref 0
-  fun stack_move n = (stack := ((!stack) + n))
-  val maxStack = ref 0
-  fun setMaxSize () = 
-    if !stack > !maxStack 
-    then (maxStack := !stack) 
-    else ()
-  fun stackSize (A.Def(_,e)) = 
-        (stackSize_expr e; 
-         stack_move ~1)
-    | stackSize (A.If (e, s1, s2)) = 
-        (stackSize_expr e; 
-         stack_move ~1; 
-         stackSize s1;
-         case s2 of
-              SOME s =>  stackSize s
-            | NONE   => ())
-    | stackSize (A.While (e,s)) = 
-        (stackSize_expr e;
-         stack_move ~1;
-         stackSize s)
-    | stackSize (A.Do (s,e))    =
-        (stackSize s;
-         stackSize_expr e)
-    | stackSize (A.For (_,_,_,st)) =
-        (stack_move 1;
-         setMaxSize();
-         stack_move ~1;
-         stackSize st;
-         stack_move 2;
-         setMaxSize();
-         stack_move ~2)
-    | stackSize (A.Iprint e)    = 
-        (stack_move 1;
-         setMaxSize();
-         stackSize_expr(e);
-         stack_move ~2)
-    | stackSize (A.Scan _) = 
-        (stack_move 1;
-         setMaxSize();
-         stack_move ~1)
-    | stackSize (A.Sprint e) = 
-        (stack_move 1;
-         setMaxSize();
-         stackSize_expr e;
-         stack_move ~2)
-    | stackSize (A.Block (_, ss)) = app stackSize ss
-    | stackSize _   = ()
-  and stackSize_expr (A.Num _) = (stack_move 1; setMaxSize())
-    | stackSize_expr (A.Var _) = (stack_move 1; setMaxSize())
-    | stackSize_expr (A.String _) = (stack_move 1; setMaxSize())
-    | stackSize_expr (A.App (_, e)) = 
-        (stackSize_expr e; stack_move 1;setMaxSize())
-    | stackSize_expr (A.Pair (e1, e2)) = 
-        (stackSize_expr e1; stackSize_expr e2;stack_move ~2)
-    | stackSize_expr (A.Inc s) = 
-        (stack_move 2; setMaxSize(); stack_move ~2)
-    | stackSize_expr (A.Neg e) = stackSize_expr e
+  fun update v nil = [Entry(0,v)]
+    | update v (Entry(n,ev)::es) = (Entry(n+1,v))::(Entry(n,ev)::es)
+
+  fun lookup x nil = raise NoDeclaration x
+    | lookup x (Entry(n,ev)::es) = 
+        if x = ev 
+          then Int.toString n
+          else lookup x es
+
+  fun stackSize ast = 
+    let 
+      val stack = ref 0
+      fun stack_move n = (stack := ((!stack) + n))
+      val maxStack = ref 0
+      fun setMaxSize () = 
+        if !stack > !maxStack 
+        then (maxStack := !stack) 
+        else ()
+      fun size (A.Def(_,e)) = 
+            (size_expr e; 
+             stack_move ~1)
+        | size (A.If (e, s1, s2)) = 
+            (size_expr e; 
+             stack_move ~1; 
+             size s1;
+             case s2 of
+                  SOME s =>  size s
+                | NONE   => ())
+        | size (A.While (e,s)) = 
+            (size_expr e;
+             stack_move ~1;
+             size s)
+        | size (A.Do (s,e))    =
+            (size s;
+             size_expr e)
+        | size (A.For (_,_,_,st)) =
+            (stack_move 1;
+             setMaxSize();
+             stack_move ~1;
+             size st;
+             stack_move 2;
+             setMaxSize();
+             stack_move ~2)
+        | size (A.Iprint e)    = 
+            (stack_move 1;
+             setMaxSize();
+             size_expr(e);
+             stack_move ~2)
+        | size (A.Scan _) = 
+            (stack_move 1;
+             setMaxSize();
+             stack_move ~1)
+        | size (A.Sprint e) = 
+            (stack_move 1;
+             setMaxSize();
+             size_expr e;
+             stack_move ~2)
+        | size (A.Block (_, ss)) = app size ss
+        | size _   = ()
+      and size_expr (A.Num _) = (stack_move 1; setMaxSize())
+        | size_expr (A.Var _) = (stack_move 1; setMaxSize())
+        | size_expr (A.String _) = (stack_move 1; setMaxSize())
+        | size_expr (A.App (_, e)) = 
+            (size_expr e; stack_move 1;setMaxSize())
+        | size_expr (A.Pair (e1, e2)) = 
+            (size_expr e1; size_expr e2;stack_move ~2)
+        | size_expr (A.Inc s) = 
+            (stack_move 2; setMaxSize(); stack_move ~2)
+        | size_expr (A.Neg e) = size_expr e
+    in
+      (size ast; !maxStack)
+    end
 
   fun localSize (A.Block (decs, ss)) = 
       let val n = case decs of
@@ -565,7 +578,7 @@ structure Table = struct
     | localSize (A.For(_,_,_,s)) = 1 + (localSize s)
     | localSize _   = 0
 
-  fun reset () = (varAddr := 0; stack := 0; maxStack := 0)
+  fun calc_size ast = (localSize ast, stackSize ast)
 end
 (* }}} *)
 
@@ -574,7 +587,6 @@ structure Emitter = struct
   structure A = Ast
   structure T = Table
 
-
   exception InternalError
   val ostream = ref TextIO.stdOut
   fun out str = TextIO.output(!ostream, str)
@@ -582,7 +594,6 @@ structure Emitter = struct
   fun out_label i = out ("L"^(Int.toString i)^":\n")
   fun out_proc ss = app out (map (fn s => "\t"^s^"\n") ss)
   fun out_goto i = out_m ("goto L"^(Int.toString i))
-  fun lookup_var env s = Int.toString(env s)
   val is_emit_power_func = ref false
 
   val label = ref 0
@@ -590,13 +601,13 @@ structure Emitter = struct
 
   fun emit_dec d env = 
     case d of
-         A.Dec (sl)   => foldl (fn (s,e) => T.update s (T.nextAddr()) e) env sl
+         A.Dec (sl)   => foldl (fn (s,e) => T.update s e) env sl
        | A.NilDec   => env
   and emit_stmt s env =
     case s of
          A.Def (s,e) => 
            (emit_expr e env;
-            out_m ("istore "^(lookup_var env s)))
+            out_m ("istore "^(T.lookup s env)))
        | A.If (c,s, opt) => 
            let 
              val i = emit_expr c env
@@ -630,14 +641,14 @@ structure Emitter = struct
             end
           end
        | A.For(var,beg,en,st) =>
-           (let val env' = (env var;env) 
+           (let val env' = (T.lookup var env ;env) 
                   handle NoDeclaration => emit_dec (A.Dec([var])) env in
               emit_stmt (A.Def(var, A.Num(beg))) env';
               let val for_start_label = incLabel() in
                 out_label for_start_label;
                 emit_stmt st env';
-                out_m ("iinc "^(lookup_var env' var)^" 1");
-                out_m ("iload "^(lookup_var env' var));
+                out_m ("iinc "^(T.lookup var env')^" 1");
+                out_m ("iload "^(T.lookup var env'));
                 out_m ("ldc "^Int.toString(en));
                 out_m ("if_icmple L"^Int.toString(for_start_label))
               end
@@ -653,7 +664,7 @@ structure Emitter = struct
        | A.Scan s       => 
            out_proc [
               "invokestatic Scan/scan()I",
-              "istore "^(lookup_var env s)
+              "istore "^(T.lookup s env)
            ]
        | A.NilStmt      => ()
        | A.Block (d,l)  => 
@@ -702,7 +713,7 @@ structure Emitter = struct
                     end
                 | _          => raise InternalError)
       | A.Pair (e1, e2) => (emit_expr e1 env; emit_expr e2 env)
-      | A.Var s => (out_m ("iload "^(Int.toString(env s)));0)
+      | A.Var s => (out_m ("iload "^(T.lookup s env));0)
       | A.Num s => (out_m ("ldc "^(Int.toString s));0)
       | A.String s => (out_m ("ldc \""^s^"\""); 0)
       | A.Neg e => (emit_expr e env; out_m "ineg";0)
@@ -753,10 +764,11 @@ end
 
 fun test () = 
   (Emitter.ostream := TextIO.openOut "tmp.j";
-   let val ast = Parser.parse() 
+   let 
+     val ast = Parser.parse() 
+     val (local_size, stack_size) = Table.calc_size ast
    in
-     Table.stackSize ast;
-     Emitter.emit ast (Table.localSize ast + 1) (!Table.maxStack);
+     Emitter.emit ast (local_size + 1) (stack_size);
      TextIO.closeOut (!Emitter.ostream);
      OS.Process.system "jasmin tmp.j"
    end)
@@ -771,10 +783,11 @@ let
        | (hd::tl)   => 
            (Parser.istream := TextIO.openIn hd;
             Emitter.ostream := TextIO.openOut "tmp.j";
-            let val ast = Parser.parse() 
+            let 
+              val ast = Parser.parse() 
+              val (local_size, stack_size) = Table.calc_size ast
             in
-              Table.stackSize ast;
-              Emitter.emit ast (Table.localSize ast + 1) (!Table.maxStack);
+              Emitter.emit ast (local_size + 1) stack_size;
               TextIO.closeOut (!Emitter.ostream);
               OS.Process.system "jasmin tmp.j"
             end)
@@ -784,12 +797,13 @@ end
 
 fun debug () = 
   (Emitter.ostream := TextIO.stdOut;
-     Table.reset; Emitter.reset;
-   let val ast = Parser.parse() 
+     Emitter.reset;
+   let 
+     val ast = Parser.parse() 
+     val (local_size, stack_size) = Table.calc_size ast
    in
-     Table.stackSize ast;
      print "--- AST:\n";
      Parser.print_stmt ast;
      print "\n--- Java Bytecode:\n";
-     Emitter.emit ast (Table.localSize ast + 1) (!Table.maxStack)
+     Emitter.emit ast (local_size + 1) stack_size
    end)
