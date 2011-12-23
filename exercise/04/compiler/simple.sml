@@ -157,7 +157,6 @@ structure Ast = struct
                | App of expr * expr
                | Neg of expr
                | Pair of expr * expr
-               
 end
 (* }}} *)
 
@@ -191,21 +190,24 @@ structure Parser = struct
   val tok = ref (L.ONE "")
   fun advance () = (tok := getToken())
   exception SyntaxError
-  fun error () = raise SyntaxError
-  fun eat t = if (!tok = t) then advance() else error()
+  fun error msg  = (print "SYNTAX ERROR:"; print msg; print "\n" ;raise SyntaxError)
+  fun eat t = 
+    if (!tok = t) 
+      then advance() 
+      else (print ("SYNTAX ERROR: Requires ");(Lexer.print_token t);error "")
   fun eat_lazy f (_:unit) = eat f
   fun eatID () = 
     case !tok of
          (L.ID s)     => (advance(); s)
-       | _            => error()
+       | _            => error "ID required."
   fun eatNUM () =
     case !tok of
          (L.NUM n)    => (advance(); (A.Num n))
-       | _            => error()
+       | _            => error "Number requried."
   fun eatSTR () =
     case !tok of
          (L.STRING s)    => (advance(); (A.String s))
-       | _            => error()
+       | _            => error "String required."
 
   fun parse () = (advance(); stmt())
   and dec () = 
@@ -231,17 +233,17 @@ structure Parser = struct
               | (L.ONE "+") =>
                   (advance();
                   case !tok of
-                       (*(L.ONE "+") => 
+                       (L.ONE "+") => 
                           (advance();eat(L.ONE ";");
                            A.Def(str, A.App(A.Var("+"), A.Pair(A.Var(str), A.Num(1)))))
-                     |*) (L.ONE "=") =>
+                     | (L.ONE "=") =>
                          (advance();
                          let val r_exp = expr() in
                            (eat(L.ONE ";"); 
                            A.Def(str, A.App(A.Var("+"), A.Pair(A.Var(str), r_exp))))
                          end)
-                     | _ => error())
-              | _ => error())
+                     | _ => error "Requires \"+ (x++; statement ) or \"= (x += NUMER statement)" )
+              | _ => error "Missing right side ( <expr> = ...?)")
        | L.DO         =>
            (advance();
            let val st = stmt() in
@@ -262,7 +264,7 @@ structure Parser = struct
                   let val for_stmt = stmt() in
                     case (for_start, for_end) of
                          (A.Num b, A.Num e) => A.For(loop_var, b, e, for_stmt)
-                       | _  => error()
+                       | _  => error "for(var, begin, end) : begin and end only accepts number literal"
                   end
                 end
               end
@@ -351,12 +353,12 @@ structure Parser = struct
                  case !tok of 
                       (L.ONE "+") => (advance();
                       A.Inc(str))
-                    | _ => error())
+                    | _ => error "Not implemented")
                 | _ => A.Var(str))
        | L.NUM num    => (advance(); A.Num(num))
        | L.ONE "("    => middle advance expr (eat_lazy(L.ONE ")"))
        | L.ONE "-"    => (advance(); A.Neg(expr()))
-       | _            => error()
+       | _            => error "Unknown factor"
   and cond () = 
     case eval_three expr condop expr of
          (e1,cop,e2)  => A.App(cop, A.Pair(e1,e2))
@@ -368,7 +370,7 @@ structure Parser = struct
        | L.ONE "<" => (advance(); A.Var("LT"))
        | L.GE      => (advance(); A.Var("GE"))
        | L.LE      => (advance(); A.Var("LE"))
-       | _         => error()
+       | _         => error "Unknown conditions operator"
   fun print_dec d =
     case d of 
          Ast.Dec sl => 
@@ -475,7 +477,8 @@ structure Table = struct
         (stackSize_expr e; stack_move 1;setMaxSize())
     | stackSize_expr (A.Pair (e1, e2)) = 
         (stackSize_expr e1; stackSize_expr e2;stack_move ~2)
-    | stackSize_expr (A.Inc s) = ()
+    | stackSize_expr (A.Inc s) = 
+        (stack_move 2; setMaxSize(); stack_move ~2)
     | stackSize_expr (A.Neg e) = stackSize_expr e
 
   fun localSize (A.Block (decs, ss)) = 
