@@ -165,6 +165,12 @@ structure Source = struct
   fun getCurrent (Src(_,p::pre,_)) = p
     | getCurrent _ = raise Error
 
+  fun getToken (Src(_, (t,_)::_,_)) = t
+    | getToken _ = raise Error
+
+  fun getLine (Src(_, (_,n)::_,_)) = n
+    | getLine _ = raise Error
+
   fun back (Src(is, nil, post)) = raise Error 
     | back (Src(is, (p::pre), post)) = Src(is, pre, p::post)
   fun init is = Src(is, nil, nil)
@@ -256,55 +262,71 @@ fun eval_three a b c = (a(), b(), c())
 structure Parser = struct
   structure L = Lexer
   structure A = Ast
+  structure S = Source
+  
+  exception SyntaxError of string
 
-  val istream = ref TextIO.stdIn
-  fun getToken () = L.gettoken (!istream)
-  val tok = ref (L.ONE "")
-  fun advance () = (tok := getToken())
-  exception SyntaxError
-  fun error msg  = (print "SYNTAX ERROR:"; print msg; print "\n" ;raise SyntaxError)
+  val source = ref $ S.init TextIO.stdIn
+
+  fun tok () = S.getToken (!source)
+  fun line_number () = S.getLine (!source)
+  fun advance () = 
+        case S.next (!source) of
+             ((tk, line_no), src) => 
+                (source := src)
+  fun back () = let val s = S.back (!source) in source := s; s end
+
+  fun init is = (
+    source := S.init (is))
+
+  fun error msg  =
+  let val msg = ("SYNTAX ERROR!!\n"^msg^"\nLine:"^(Int.toString (line_number()))^
+              " LAST TOKEN:"^(L.inspect (tok())))
+  in (raise SyntaxError msg) 
+  end
+
   fun eat t = 
-    if (!tok = t) 
+    if (tok() = t) 
       then advance() 
-      else (print ("SYNTAX ERROR: Requires ");(Lexer.print_token t);error "")
+      else error ("Missing "^(L.inspect t))
   fun eat_lazy f (_:unit) = eat f
   fun eatID () = 
-    case !tok of
+    case tok() of
          (L.ID s)     => (advance(); s)
        | _            => error "ID required."
   fun eatNUM () =
-    case !tok of
+    case tok() of
          (L.NUM n)    => (advance(); (A.Num n))
        | _            => error "Number requried."
   fun eatSTR () =
-    case !tok of
+    case tok() of
          (L.STRING s)    => (advance(); (A.String s))
        | _            => error "String required."
 
   fun parse () = (advance(); stmt())
   and dec () = 
-    case !tok of
+    case tok() of
          L.INT    => A.Dec(middle advance ids (eat_lazy(L.ONE ";")))
        | _        => A.NilDec
   and ids () = (eatID())::(ids'())
   and ids' () =
-    case !tok of
+    case tok() of
          (L.ONE ",")    => (advance(); (eatID()) :: (ids'()))
        | _              => nil
   and stmts () = 
-    case !tok of
+    case tok() of
          L.ONE "}"    => nil
        | _            => (stmt()) :: (stmts())
   and stmt ()=
-    case !tok of
+    case tok() of
          L.ID str     => 
            (advance(); 
-           case !tok of
+           case tok() of
                 (L.ONE "=") =>
                    A.Def(str, middle (eat_lazy(L.ONE "=")) expr (eat_lazy(L.ONE ";")))
               | (L.ONE "+") =>
                   (advance();
-                  case !tok of
+                  case tok() of
                        (L.ONE "+") => 
                           (advance();eat(L.ONE ";");
                            A.Def(str, A.App(A.Var("+"), A.Pair(A.Var(str), A.Num(1)))))
@@ -363,7 +385,7 @@ structure Parser = struct
                 (d,s,_)   => A.Block(d, s))
        | _            => A.NilStmt
   and else_opt () = 
-    case !tok of
+    case tok() of
          L.ELSE   => (advance(); SOME (stmt()))
        | _        => NONE
   (*
@@ -377,7 +399,7 @@ structure Parser = struct
       expr' first_term
     end
   and expr' prev_expr = 
-    case !tok of
+    case tok() of
          (L.ONE "+")    =>
             (advance();
             let val c_term = term() in
@@ -395,7 +417,7 @@ structure Parser = struct
       term' first_factor 
     end
   and term' prev_term = 
-    case !tok of
+    case tok() of
          (L.ONE "*")    => 
             (advance();
             let val c_factor = factor() in
@@ -418,14 +440,14 @@ structure Parser = struct
             end)
        | _            => prev_term
   and factor () = 
-    case !tok of 
+    case tok() of 
          L.ID str     => (advance(); 
-            case !tok of
+            case tok() of
                  (L.ONE "+") => (advance();
-                 case !tok of 
+                 case tok() of 
                       (L.ONE "+") => (advance();
                       A.Inc(str))
-                    | _ => error "Not implemented")
+                    | _ => (back(); A.Var(str)))
                 | _ => A.Var(str))
        | L.NUM num    => (advance(); A.Num(num))
        | L.ONE "("    => middle advance expr (eat_lazy(L.ONE ")"))
@@ -435,7 +457,7 @@ structure Parser = struct
     case eval_three expr condop expr of
          (e1,cop,e2)  => A.App(cop, A.Pair(e1,e2))
   and condop () = 
-    case !tok of
+    case tok() of
          L.EQ      => (advance(); A.Var("EQ"))
        | L.NEQ     => (advance(); A.Var("NEQ"))
        | L.ONE ">" => (advance(); A.Var("GT"))
@@ -747,7 +769,7 @@ let
          nil => (err (name^": missing file name\n");
                  OS.Process.exit OS.Process.failure)
        | (hd::tl)   => 
-           (Parser.istream := TextIO.openIn hd;
+           (Parser.init $ TextIO.openIn hd;
             Emitter.ostream := TextIO.openOut "tmp.j";
             let 
               val ast = Parser.parse() 
@@ -756,7 +778,11 @@ let
               Emitter.emit ast (local_size + 1) stack_size;
               TextIO.closeOut (!Emitter.ostream);
               OS.Process.system "jasmin tmp.j"
-            end)
+            end 
+            handle 
+              (Parser.SyntaxError msg) => (print msg; OS.Process.failure)
+            | (Table.NoDeclaration s) => (print ("NoDeclaration:"^s); OS.Process.failure)
+            | _ => (print "Unknown Error.\n"; OS.Process.failure))
 in
   exec(); OS.Process.success
 end
@@ -769,7 +795,11 @@ fun debug () =
      val (local_size, stack_size) = Table.calc_size ast
    in
      print "--- AST:\n";
-     Parser.print_stmt ast;
+     Parser.print_stmt ast; 
      print "\n--- Java Bytecode:\n";
      Emitter.emit ast (local_size + 1) stack_size
-   end)
+   end 
+   handle 
+     (Parser.SyntaxError msg) => (print (msg^"\n"))
+   | (Table.NoDeclaration s) => (print ("SYNTAX ERROR: Undeclared variable!!"^s^"\n"))
+   | _ => (print "Unknown Error.\n"))
