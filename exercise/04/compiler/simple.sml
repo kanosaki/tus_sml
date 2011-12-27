@@ -19,6 +19,7 @@ structure Lexer = struct
 
   val current_line = ref 0
 
+
   fun read istream = 
     case TextIO.input1 istream of
          SOME x   => String.str x
@@ -98,14 +99,20 @@ structure Lexer = struct
              end)
            else ONE (read istream)
   end
+  and proceed_line () = current_line := !current_line + 1
   and gettoken istream =
       let val token = native_token istream in
         case token of 
              ONE " "  => gettoken istream
            | ONE "\t" => gettoken istream
-           | ONE "\n" => (current_line := !current_line + 1; gettoken istream)
+           | ONE "#"  => (drop_comment istream; gettoken istream)
+           | ONE "\n" => (proceed_line(); gettoken istream)
            | _        => token
       end
+  and drop_comment istream = 
+        if (read istream) = "\n" 
+          then () 
+          else drop_comment istream
   and getpack istream = 
       let val tok = gettoken istream in
         (tok, !current_line)
