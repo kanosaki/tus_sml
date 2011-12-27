@@ -577,6 +577,77 @@ structure Table = struct
 end
 (* }}} *)
 
+(* Bytecode {{{ *)
+structure Bytecode = struct
+  datatype java_type = I | V | Class of string
+  type label = string
+  datatype inst = IntConst of int | StrConst of string
+                | Load of int
+                | Store of int
+                | GetStatic of string * java_type
+                | InvokeVirtual of string * java_type list * java_type
+                | InvokeStatic of string * java_type list * java_type
+                | InvokeNonVirtual of string * java_type list * java_type
+                | GoTo of label
+                | Increase of int * int
+                | Add | Sub | Mul | Div | Rem
+                | CmpLe of label | CmpLt of label
+                | CmpGe of label | CmpGt of label 
+                | CmpEq of label | CmpNe of label
+                | IfLe of label | IfLt of label 
+                | IfGe of label | IfGt of label 
+                | IfEq of label | IfNe of label
+                | And | Or | Xor 
+                | Return | IReturn
+  type code = inst list
+ 
+
+  fun conv_type I = "I"
+    | conv_type V = "V"
+    | conv_type (Class s) = "L" ^ s ^ ";"
+
+  fun conv_args types = foldl (op^) "" $ map conv_type types 
+
+  fun conv_inst (IntConst i) = "ldc " ^ (Int.toString i)
+    | conv_inst (StrConst s) = "ldc " ^ s
+    | conv_inst (Load i) = "iload " ^ (Int.toString i)
+    | conv_inst (Store i) = "istore " ^ (Int.toString i)
+    | conv_inst (GetStatic (path, t)) = "getstatic "^ path ^ (conv_type t)
+    | conv_inst (InvokeVirtual(path, args, t)) = 
+        "invokevirtual " ^ path ^ "(" ^ (conv_args args) ^ ")" ^ (conv_type t)
+    | conv_inst (InvokeNonVirtual(path, args, t)) = 
+        "invokenonvirtual " ^ path ^ "(" ^ (conv_args args) ^ ")" ^ (conv_type t)
+    | conv_inst (InvokeStatic(path, args, t)) = 
+        "invokestatic " ^ path ^ "(" ^ (conv_args args) ^ ")" ^ (conv_type t)
+    | conv_inst (GoTo s) = "goto " ^ s
+    | conv_inst (Increase(loc, v)) = 
+        "iinc "^(Int.toString loc)^" "^(Int.toString v)
+    | conv_inst Add = "iadd"
+    | conv_inst Sub = "isub"
+    | conv_inst Mul = "imul"
+    | conv_inst Div = "idiv"
+    | conv_inst Rem = "irem"
+    | conv_inst (CmpLe l) = "if_icmple " ^ l
+    | conv_inst (CmpLt l) = "if_icmplt " ^ l
+    | conv_inst (CmpGe l) = "if_icmpge " ^ l
+    | conv_inst (CmpGt l) = "if_icmpgt " ^ l
+    | conv_inst (CmpEq l) = "if_icmpeq " ^ l
+    | conv_inst (CmpNe l) = "if_icmpne " ^ l
+    | conv_inst (IfLe l) = "ifle " ^ l
+    | conv_inst (IfLt l) = "iflt " ^ l
+    | conv_inst (IfGe l) = "ifge " ^ l
+    | conv_inst (IfGt l) = "ifgt " ^ l
+    | conv_inst (IfEq l) = "ifeq " ^ l
+    | conv_inst (IfNe l) = "ifne " ^ l
+    | conv_inst (And) = "iand"
+    | conv_inst (Or) = "ior"
+    | conv_inst (Xor) = "ixor"
+    | conv_inst (Return) = "return"
+    | conv_inst (IReturn) = "ireturn"
+
+end
+(* }}} *)
+
 (* Emitter {{{ *) 
 structure Emitter = struct 
   structure A = Ast
