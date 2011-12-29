@@ -492,7 +492,7 @@ structure Table = struct
   fun lookup x nil = raise NoDeclaration x
     | lookup x (Entry(n,ev)::es) = 
         if x = ev 
-          then Int.toString n
+          then n
           else lookup x es
 
   fun stackSize ast = 
@@ -579,7 +579,7 @@ end
 
 (* Bytecode {{{ *)
 structure Bytecode = struct
-  datatype java_type = I | V | Class of string
+  datatype java_type = I | V | Class of string | Array of java_type | String
   type label = string
   datatype inst = IntConst of int | StrConst of string
                 | Load of int
@@ -590,7 +590,7 @@ structure Bytecode = struct
                 | InvokeNonVirtual of string * java_type list * java_type
                 | GoTo of label
                 | Increase of int * int
-                | Add | Sub | Mul | Div | Rem
+                | Add | Sub | Mul | Div | Rem | Neg
                 | CmpLe of label | CmpLt of label
                 | CmpGe of label | CmpGt of label 
                 | CmpEq of label | CmpNe of label
@@ -599,12 +599,14 @@ structure Bytecode = struct
                 | IfEq of label | IfNe of label
                 | And | Or | Xor 
                 | Return | IReturn
+                | Label of label
   type code = inst list
- 
 
   fun conv_type I = "I"
     | conv_type V = "V"
+    | conv_type String = conv_type $ Class("java/lang/String")
     | conv_type (Class s) = "L" ^ s ^ ";"
+    | conv_type (Array t) =  "[" ^ conv_type t
 
   fun conv_args types = foldl (op^) "" $ map conv_type types 
 
@@ -627,6 +629,7 @@ structure Bytecode = struct
     | conv_inst Mul = "imul"
     | conv_inst Div = "idiv"
     | conv_inst Rem = "irem"
+    | conv_inst Neg = "ineg"
     | conv_inst (CmpLe l) = "if_icmple " ^ l
     | conv_inst (CmpLt l) = "if_icmplt " ^ l
     | conv_inst (CmpGe l) = "if_icmpge " ^ l
@@ -644,36 +647,96 @@ structure Bytecode = struct
     | conv_inst (Xor) = "ixor"
     | conv_inst (Return) = "return"
     | conv_inst (IReturn) = "ireturn"
+    | conv_inst (Label l) = l
 
 end
 (* }}} *)
+
+(* Output{{{ *) 
+structure Output = struct
+  structure B = Bytecode
+  exception NotSupported
+  datatype proceedure = Function of 
+                               string (* Name *) 
+                               * B.java_type list (* Argument Types *)
+                               * B.java_type (* Return type *)
+                               * int  (* Local Size *)
+                               * int  (* Stack Size *)
+                               * B.inst list (* Instructions *)
+                      | Raw of string * string
+  datatype pool = Pool of TextIO.outstream * proceedure list 
+  fun init_pool ostream = Pool(ostream, nil)
+  fun push inst (Function(name, args, ret ,szLoc, szSt, insts)) =
+    Function(name, args, ret, szLoc, szSt, inst::insts)
+    | push _ (Raw(_,_)) = raise NotSupported
+  fun store proc (Pool(out, procs)) = Pool(out, proc::procs)
+
+  fun indent_inst (B.Label l) = l ^ ":\n"
+    | indent_inst els       = "\t" ^ B.conv_inst els ^ "\n"
+
+  val header = 
+    (".class synchronized Aout\n"^
+    ".super java/lang/Object\n"^
+    ".method <init>()V\n"^
+      "\t.limit locals 1\n"^
+      "\t.limit stack 1\n"^
+      "\taload_0\n"^
+      "\tinvokenonvirtual java/lang/Object.<init>()V\n"^
+      "\treturn\n"^
+    ".end method\n\n")
+  val footer = ".end method\n"
+  fun conv_proc (Function(name, args, ret ,szLoc, szSt, insts)) = 
+    ".method public static "^name^"("^(B.conv_args args)^")"^(B.conv_type ret)^"\n"^
+    "\t.limit locals "^(Int.toString (szLoc))^"\n"^
+    "\t.limit stack "^(Int.toString szSt)^"\n"^
+    (foldl (op^) "" (map indent_inst insts))
+    | conv_proc (Raw (_, s)) = s
+
+  fun flush (Pool(out, procs)) = 
+  let fun output s = TextIO.output(out, s) in
+    (output(header);
+     app output (map conv_proc procs);
+     output(footer))
+  end
+end
+(* }}} *)
+
+fun >>= (f,g) x = g (f x)
+infix 0 >>=
 
 (* Emitter {{{ *) 
 structure Emitter = struct 
   structure A = Ast
   structure T = Table
-
+  structure B = Bytecode
+  structure O = Output
+  
   exception InternalError
-  val ostream = ref TextIO.stdOut
-  fun out str = TextIO.output(!ostream, str)
-  fun out_m s = out ("\t"^s^"\n")
-  fun out_label i = out ("L"^(Int.toString i)^":\n")
-  fun out_proc ss = app out (map (fn s => "\t"^s^"\n") ss)
-  fun out_goto i = out_m ("goto L"^(Int.toString i))
-  val is_emit_power_func = ref false
+
+  val pool = ref (O.init_pool TextIO.stdOut)
+  val out = ref (nil:B.inst list)
+  fun push inst = out := (inst :: (!out)) 
 
   val label = ref 0
   fun incLabel () = (label := !label + 1; !label)
+  fun conv_label i = "L"^(Int.toString i)
+
+  fun init ostream = (pool := O.init_pool ostream; label := 0)
 
   fun emit_dec d env = 
     case d of
          A.Dec (sl)   => foldl (fn (s,e) => T.update s e) env sl
        | A.NilDec   => env
   and emit_stmt s env =
+  let 
+    fun lookup_var s = T.lookup s env
+    fun push_label i = push (B.Label(conv_label i))
+    fun push_goto i = push (B.GoTo(conv_label i))
+  in
     case s of
          A.Def (s,e) => 
            (emit_expr e env;
-            out_m ("istore "^(T.lookup s env)))
+            push (B.Store(lookup_var s)))
        | A.If (c,s, opt) => 
            let 
              val i = emit_expr c env
@@ -682,56 +745,59 @@ structure Emitter = struct
              emit_stmt s env;
              case opt of 
                   SOME s2 => 
-                    (out_goto j;
-                     out_label i;
+                    (push_goto j;
+                     push_label i;
                      emit_stmt s2 env;
-                     out_label j)
-                | NONE    => (out_label i)
+                     push_label j)
+                | NONE    => (push_label i)
            end
        | A.While (c,s)  => 
            let val i = incLabel() in
-             out_label i;
+             push_label i;
              let val j = emit_expr c env in
                emit_stmt s env;
-               out_goto i;
-               out_label j
+               push_goto i;
+               push_label j
              end
            end
        | A.Do (s,e)     =>
           let val do_start = incLabel() in
-            out_label do_start; (* Start *)
+            push_label do_start; (* Start *)
             emit_stmt s env;
             let val do_end = emit_expr e env in
-              out_goto do_start;
-              out_label do_end
+              push_goto do_start;
+              push_label do_end
             end
           end
-       | A.For(var,beg,en,st) =>
-           (let val env' = (T.lookup var env ;env) 
+       | A.For(var,begin_num,end_num,st) =>
+           (let val env' = (lookup_var var;env) 
                   handle NoDeclaration => emit_dec (A.Dec([var])) env in
-              emit_stmt (A.Def(var, A.Num(beg))) env';
-              let val for_start_label = incLabel() in
-                out_label for_start_label;
+              emit_stmt (A.Def(var, A.Num(begin_num))) env';
+              let 
+                val for_start_label = incLabel() 
+                val counter_var = T.lookup var env'
+              in
+                push_label for_start_label;
                 emit_stmt st env';
-                out_m ("iinc "^(T.lookup var env')^" 1");
-                out_m ("iload "^(T.lookup var env'));
-                out_m ("ldc "^Int.toString(en));
-                out_m ("if_icmple L"^Int.toString(for_start_label))
+                push $ B.Increase(counter_var, 1);
+                push $ B.Load(counter_var);
+                push $ B.IntConst(end_num);
+                push $ B.CmpLe(conv_label for_start_label)
               end
             end)
        | A.Sprint s     => 
-           (out_m "getstatic java/lang/System/out Ljava/io/PrintStream;";
+           (push $ B.GetStatic("java/lang/System/out", B.Class("java/io/PrintStream"));
             emit_expr s env;
-            out_m "invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V")
+            push $ 
+                 B.InvokeVirtual("java/io/PrintStream/print", 
+                [B.Class("java/lang/String")], B.V))
        | A.Iprint e     =>
-           (out_m "getstatic java/lang/System/out Ljava/io/PrintStream;";
+           (push $ B.GetStatic("java/lang/System/out", B.Class("java/io/PrintStream"));
             emit_expr e env;
-            out_m "invokevirtual java/io/PrintStream/print(I)V")
+            push (B.InvokeVirtual("java/io/PrintStream/print", [B.I], B.V)))
        | A.Scan s       => 
-           out_proc [
-              "invokestatic Scan/scan()I",
-              "istore "^(T.lookup s env)
-           ]
+           (push $ B.InvokeStatic("Scan/scan", nil, B.I);
+            push $ B.Store(lookup_var s))
        | A.NilStmt      => ()
        | A.Block (d,l)  => 
            let 
@@ -739,53 +805,56 @@ structure Emitter = struct
            in 
              app (fn st => emit_stmt st env') l
            end
+  end
   and emit_expr ast env =
     case ast of
          A.App (e1, e2) =>
             (emit_expr e2 env;
              case e1 of
-                  A.Var "+" => (out_m ("iadd");0)
-                | A.Var "-" => (out_m ("isub");0)
-                | A.Var "*" => (out_m ("imul");0)
-                | A.Var "/" => (out_m ("idiv");0)
-                | A.Var "!" => (out_m ("ineg");0)
-                | A.Var "%" => (out_m ("irem");0)
+                  A.Var "+" => (push B.Add;0)
+                | A.Var "-" => (push B.Sub;0)
+                | A.Var "*" => (push B.Mul;0)
+                | A.Var "/" => (push B.Div;0)
+                | A.Var "!" => (push B.Neg;0)
+                | A.Var "%" => (push B.Rem;0)
                 | A.Var "^" => 
-                    (is_emit_power_func := true;
-                     out_m ("invokestatic Aout/power(II)I");0)
+                    ((* TODO: EMIT_POWER_FUNC *)
+                     push (B.InvokeStatic("Aout/power", [B.I, B.I], B.I));0)
                 | A.Var "EQ" =>
                     let val n = incLabel() in
-                      out_m ("if_icmpne L"^Int.toString(n)); n
+                      push (B.CmpNe(conv_label n));n
                     end
                 | A.Var "NEQ" => 
                     let val n = incLabel() in
-                      out_m ("if_icmpeq L"^Int.toString(n)); n
+                      push (B.CmpEq(conv_label n));n
                     end
                 | A.Var "GT" =>  
                     let val n = incLabel() in
-                      out_m ("if_icmple L"^Int.toString(n)); n
+                      push (B.CmpLe(conv_label n));n
                     end
                 | A.Var "LT" => 
                     let val n = incLabel() in
-                      out_m ("if_icmpge L"^Int.toString(n)); n
+                      push (B.CmpGe(conv_label n));n
                     end
                 | A.Var "GE" => 
                     let val n = incLabel() in
-                      out_m ("if_icmplt L"^Int.toString(n)); n
+                      push (B.CmpLt(conv_label n));n
                     end
                 | A.Var "LE" => 
                     let val n = incLabel() in
-                      out_m ("if_icmpgt L"^Int.toString(n)); n
+                      push (B.CmpGt(conv_label n));n
                     end
                 | _          => raise InternalError)
       | A.Pair (e1, e2) => (emit_expr e1 env; emit_expr e2 env)
-      | A.Var s => (out_m ("iload "^(T.lookup s env));0)
-      | A.Num s => (out_m ("ldc "^(Int.toString s));0)
-      | A.String s => (out_m ("ldc \""^s^"\""); 0)
-      | A.Neg e => (emit_expr e env; out_m "ineg";0)
-      | A.Inc s => (emit_expr (A.Var s) env; out_m ("iconst_1");out_m("iadd");0)
-  fun emit_power_func () = 
-    (out (
+      | A.Var s => (push (B.Load(T.lookup s env));0)
+      | A.Num i => (push (B.IntConst i);0)
+      | A.String s => (push (B.StrConst s); 0)
+      | A.Neg e => (emit_expr e env; push (B.Neg);0)
+      | A.Inc s => (emit_expr (A.Var s) env; 
+                    push (B.IntConst 1);
+                    push B.Add;
+                    0)
+  val power_func = O.Raw("power",
     ".method static power(II)I\n"^
         "\t.limit locals 2\n"^
         "\t.limit stack 2\n\n"^
@@ -800,34 +869,21 @@ structure Emitter = struct
         "\tgoto L_START\n"^
     "L_END:\n"^
         "\tireturn\n"^
-    ".end method\n"))
-  fun emit ast localSize stackSize = 
-    (out (
-    ".class synchronized Aout\n"^
-    ".super java/lang/Object\n"^
-    ".method <init>()V\n"^
-    "\t.limit locals 1\n"^
-    "\t.limit stack 1\n"^
-    "\taload_0\n"^
-    "\tinvokenonvirtual java/lang/Object.<init>()V\n"^
-    "\treturn\n"^
-    ".end method\n\n"^
-    ".method public static main([Ljava/lang/String;)V\n"^
-    "\t.limit locals "^(Int.toString (localSize))^"\n"^
-    "\t.limit stack "^(Int.toString stackSize)^"\n");
-    emit_stmt ast T.init;
-    out(
-    "\treturn\n"^
-    ".end method\n");
-    if !is_emit_power_func then emit_power_func() else ())
+    ".end method\n")
 
 
-  fun reset () = (
-    label := 0;
-    is_emit_power_func := false)
+  fun emit ast szLocal szStack outstream = 
+  let 
+    val main_code = (emit_stmt ast T.init; B.Return :: (!out)) 
+    val main = 
+      O.Function("main", [B.Array(B.String)], B.V, szLocal, szStack, main_code)
+    val pool = O.Pool(outstream, [main])
+  in
+    O.flush pool
+  end
 end
 (* }}} *)
-
+(*
 fun test () = 
   (Emitter.ostream := TextIO.openOut "tmp.j";
    let 
@@ -864,10 +920,9 @@ let
 in
   exec(); OS.Process.success
 end
-
+*)
 fun debug () = 
-  (Emitter.ostream := TextIO.stdOut;
-     Emitter.reset;
+  (Emitter.init;
    let 
      val ast = Parser.parse() 
      val (local_size, stack_size) = Table.calc_size ast
@@ -875,9 +930,10 @@ fun debug () =
      print "--- AST:\n";
      Parser.print_stmt ast; 
      print "\n--- Java Bytecode:\n";
-     Emitter.emit ast (local_size + 1) stack_size
+     Emitter.emit ast (local_size + 1) stack_size TextIO.stdOut
    end 
    handle 
      (Parser.SyntaxError msg) => (print (msg^"\n"))
    | (Table.NoDeclaration s) => (print ("SYNTAX ERROR: Undeclared variable!!"^s^"\n"))
    | _ => (print "Unknown Error.\n"))
+
