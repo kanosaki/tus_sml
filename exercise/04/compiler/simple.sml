@@ -241,7 +241,7 @@ structure Ast = struct
        | Num n => ( "Num "^  (Int.toString(n)))
        | String s => ( "String \""^  s^  "\" ")
        | Neg e    => ( "Neg["^ inspect_expr e^  "] ")
-       | Inc s    => ( s^  "++ ")
+       | Inc s    => ( "Inc["^s^"]")
 end
 (* }}} *)
 
@@ -611,10 +611,10 @@ structure Bytecode = struct
   fun conv_args types = foldl (op^) "" $ map conv_type types 
 
   fun conv_inst (IntConst i) = "ldc " ^ (Int.toString i)
-    | conv_inst (StrConst s) = "ldc " ^ s
+    | conv_inst (StrConst s) = "ldc \"" ^ s ^ "\""
     | conv_inst (Load i) = "iload " ^ (Int.toString i)
     | conv_inst (Store i) = "istore " ^ (Int.toString i)
-    | conv_inst (GetStatic (path, t)) = "getstatic "^ path ^ (conv_type t)
+    | conv_inst (GetStatic (path, t)) = "getstatic "^ path ^ " " ^ (conv_type t)
     | conv_inst (InvokeVirtual(path, args, t)) = 
         "invokevirtual " ^ path ^ "(" ^ (conv_args args) ^ ")" ^ (conv_type t)
     | conv_inst (InvokeNonVirtual(path, args, t)) = 
@@ -684,25 +684,21 @@ structure Output = struct
       "\tinvokenonvirtual java/lang/Object.<init>()V\n"^
       "\treturn\n"^
     ".end method\n\n")
-  val footer = ".end method\n"
   fun conv_proc (Function(name, args, ret ,szLoc, szSt, insts)) = 
     ".method public static "^name^"("^(B.conv_args args)^")"^(B.conv_type ret)^"\n"^
     "\t.limit locals "^(Int.toString (szLoc))^"\n"^
     "\t.limit stack "^(Int.toString szSt)^"\n"^
-    (foldl (op^) "" (map indent_inst insts))
+    (foldl (op^) "" (map indent_inst insts)^
+    ".end method\n\n")
     | conv_proc (Raw (_, s)) = s
 
   fun flush (Pool(out, procs)) = 
   let fun output s = TextIO.output(out, s) in
-    (output(header);
-     app output (map conv_proc procs);
-     output(footer))
+     output header;
+     app output (map conv_proc procs)
   end
 end
 (* }}} *)
-
-fun >>= (f,g) x = g (f x)
-infix 0 >>=
 
 (* Emitter {{{ *) 
 structure Emitter = struct 
@@ -713,7 +709,6 @@ structure Emitter = struct
   
   exception InternalError
 
-  val pool = ref (O.init_pool TextIO.stdOut)
   val out = ref (nil:B.inst list)
   fun push inst = out := (inst :: (!out)) 
 
@@ -721,7 +716,7 @@ structure Emitter = struct
   fun incLabel () = (label := !label + 1; !label)
   fun conv_label i = "L"^(Int.toString i)
 
-  fun init ostream = (pool := O.init_pool ostream; label := 0)
+  fun init () = (label := 0; out := nil)
 
   fun emit_dec d env = 
     case d of
@@ -818,8 +813,7 @@ structure Emitter = struct
                 | A.Var "!" => (push B.Neg;0)
                 | A.Var "%" => (push B.Rem;0)
                 | A.Var "^" => 
-                    ((* TODO: EMIT_POWER_FUNC *)
-                     push (B.InvokeStatic("Aout/power", [B.I, B.I], B.I));0)
+                    (push (B.InvokeStatic("Aout/power", [B.I, B.I], B.I));0)
                 | A.Var "EQ" =>
                     let val n = incLabel() in
                       push (B.CmpNe(conv_label n));n
@@ -850,10 +844,15 @@ structure Emitter = struct
       | A.Num i => (push (B.IntConst i);0)
       | A.String s => (push (B.StrConst s); 0)
       | A.Neg e => (emit_expr e env; push (B.Neg);0)
-      | A.Inc s => (emit_expr (A.Var s) env; 
-                    push (B.IntConst 1);
-                    push B.Add;
-                    0)
+      | A.Inc s => 
+          let val var_num = T.lookup s env in
+            emit_expr (A.Var s) env; 
+            push (B.IntConst 1);
+            push B.Add;
+            push (B.Store var_num);
+            push (B.Load var_num);
+            0
+          end
   val power_func = O.Raw("power",
     ".method static power(II)I\n"^
         "\t.limit locals 2\n"^
@@ -877,7 +876,13 @@ structure Emitter = struct
     val main_code = (emit_stmt ast T.init; B.Return :: (!out)) 
     val main = 
       O.Function("main", [B.Array(B.String)], B.V, szLocal, szStack, main_code)
-    val pool = O.Pool(outstream, [main])
+    val is_emit_pow = 
+      List.exists 
+        (fn x => case x of
+                      (B.InvokeStatic ("Aout/power",_,_)) => true 
+                    | _ => false) main_code
+    val pool = 
+      O.Pool(outstream, (if is_emit_pow then [main, power_func] else [main]))
   in
     O.flush pool
   end
@@ -894,7 +899,7 @@ fun test () =
      TextIO.closeOut (!Emitter.ostream);
      OS.Process.system "jasmin tmp.j"
    end)
-
+*)
 fun err str = TextIO.output(TextIO.stdErr, str)
 fun main (name, args) = 
 let 
@@ -904,25 +909,25 @@ let
                  OS.Process.exit OS.Process.failure)
        | (hd::tl)   => 
            (Parser.init $ TextIO.openIn hd;
-            Emitter.ostream := TextIO.openOut "tmp.j";
             let 
               val ast = Parser.parse() 
               val (local_size, stack_size) = Table.calc_size ast
+              val ostream = TextIO.openOut "tmp.j"
             in
-              Emitter.emit ast (local_size + 1) stack_size;
-              TextIO.closeOut (!Emitter.ostream);
+              Emitter.emit ast (local_size + 1) stack_size ostream;
+              TextIO.closeOut ostream;
               OS.Process.system "jasmin tmp.j"
             end 
             handle 
-              (Parser.SyntaxError msg) => (print msg; OS.Process.failure)
-            | (Table.NoDeclaration s) => (print ("NoDeclaration:"^s); OS.Process.failure)
+              (Parser.SyntaxError msg) => (print (msg^"\n"); OS.Process.failure)
+            | (Table.NoDeclaration s) => (print ("Undeclared variable!!:"^s^"\n"); OS.Process.failure)
             | _ => (print "Unknown Error.\n"; OS.Process.failure))
 in
   exec(); OS.Process.success
 end
-*)
+
 fun debug () = 
-  (Emitter.init;
+  (Emitter.init();
    let 
      val ast = Parser.parse() 
      val (local_size, stack_size) = Table.calc_size ast
