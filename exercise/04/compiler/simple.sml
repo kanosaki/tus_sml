@@ -262,9 +262,11 @@ structure Ast = struct
            | Var "-" => Num(a - b)
            | Var "/" => Num(a div b)
            | Var "*" => Num(a * b)
-           | els     => App(ope, Pair(Num a, Num b)))
-    | optimze_expr (Neg e) = optimze_expr e
-    | optimze_expr (App(v,e)) = optimze_expr e
+           | _       => App(ope, Pair(Num a, Num b)))
+    | optimze_expr (App(v,Pair(Var m, n))) = App(v, Pair(Var m, optimze_expr n))
+    | optimze_expr (App(v,Pair(n,Var m))) = App(v, Pair(optimze_expr n, Var m))
+    | optimze_expr (App(v,e)) = optimze_expr $ App(v,optimze_expr e)
+    | optimze_expr (Neg e) = Neg(optimze_expr e)
     | optimze_expr (Pair(e1,e2)) = Pair(optimze_expr e1, optimze_expr e2)
     | optimze_expr a = a 
 end
@@ -673,7 +675,14 @@ structure Bytecode = struct
     | conv_inst (Return) = "return"
     | conv_inst (IReturn) = "ireturn"
     | conv_inst (Label l) = l
-
+  
+  (* NOTE: Instructions are reversed. *)
+  fun optimize ((Store i)::(Load j)::xs) =
+        if i = j
+          then optimize xs
+          else (Store i)::(Load j)::(optimize xs)
+    | optimize (x::xs) = x :: (optimize xs)
+    | optimize nil = nil
 end
 (* }}} *)
 
@@ -894,13 +903,32 @@ structure Emitter = struct
     "L_END:\n"^
         "\tireturn\n"^
     ".end method\n")
+  
+  fun generate ast = (emit_stmt ast T.init; B.Return :: (!out)) 
 
-
-  fun emit ast szLocal szStack outstream = 
+  fun emit_optimize ast outstream = 
   let 
-    val main_code = (emit_stmt ast T.init; B.Return :: (!out)) 
+    val main_code = (init();B.optimize $ generate ast)
+    val (szLocal, szStack) = T.calc_size ast
     val main = 
-      O.Function("main", [B.Array(B.String)], B.V, szLocal, szStack, main_code)
+      O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
+    val is_emit_pow = 
+      List.exists 
+        (fn x => case x of
+                      (B.InvokeStatic ("Aout/power",_,_)) => true 
+                    | _ => false) main_code
+    val pool = 
+      O.Pool(outstream, (if is_emit_pow then [main, power_func] else [main]))
+  in
+    O.flush pool
+  end
+
+  fun emit ast outstream = 
+  let 
+    val main_code = (init();generate ast)
+    val (szLocal, szStack) = T.calc_size ast
+    val main = 
+      O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
     val is_emit_pow = 
       List.exists 
         (fn x => case x of
@@ -936,10 +964,9 @@ let
            (Parser.init $ TextIO.openIn hd;
             let 
               val ast = Parser.parse() 
-              val (local_size, stack_size) = Table.calc_size ast
               val ostream = TextIO.openOut "tmp.j"
             in
-              Emitter.emit ast (local_size + 1) stack_size ostream;
+              Emitter.emit ast ostream;
               TextIO.closeOut ostream;
               OS.Process.system "jasmin tmp.j"
             end 
@@ -952,15 +979,18 @@ in
 end
 
 fun debug () = 
-  (Emitter.init();
-   let 
+  (let 
      val ast = Parser.parse() 
-     val (local_size, stack_size) = Table.calc_size ast
+     val optimized_ast = Ast.optimze_stmt ast
    in
      print "--- AST:\n";
      Parser.print_stmt ast; 
-     print "\n--- Java Bytecode:\n";
-     Emitter.emit ast (local_size + 1) stack_size TextIO.stdOut
+     print "\n\n--- Optimized AST\n";
+     Parser.print_stmt optimized_ast;
+     print "\n\n--- Java Bytecode:\n";
+     Emitter.emit ast TextIO.stdOut;
+     print "\n\n--- Optimized Java Bytecode:\n";
+     Emitter.emit_optimize optimized_ast TextIO.stdOut
    end 
    handle 
      (Parser.SyntaxError msg) => (print (msg^"\n"))
