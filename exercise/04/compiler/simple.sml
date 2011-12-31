@@ -217,7 +217,7 @@ structure Ast = struct
        | If (c,s,opt) =>
            ("If("^ inspect_expr c^","^inspect_stmt s^","^
             (case opt of 
-                 SOME s2 => inspect_stmt s2 
+                 SOME s2 => inspect_stmt s2
                | NONE =>  ")"))
        | While (c,s) => ( "While("^inspect_expr c^","^ inspect_stmt s^")")
        | Sprint s => ( "Sprint("^inspect_expr s^")")
@@ -242,6 +242,31 @@ structure Ast = struct
        | String s => ( "String \""^  s^  "\" ")
        | Neg e    => ( "Neg["^ inspect_expr e^  "] ")
        | Inc s    => ( "Inc["^s^"]")
+
+
+  fun optimze_stmt (Def(s,e)) = Def(s, optimze_expr e)
+    | optimze_stmt (If(e, s1, s2)) = If(optimze_expr e, optimze_stmt s1,
+        case s2 of
+             SOME s => SOME $ optimze_stmt s 
+           | NONE => NONE)
+    | optimze_stmt (While(e,s)) = While(optimze_expr e, optimze_stmt s)
+    | optimze_stmt (For(s,b,e,st)) = For(s,b,e,optimze_stmt st)
+    | optimze_stmt (Do(s,e)) = Do(optimze_stmt s, optimze_expr e)
+    | optimze_stmt (Iprint e) = Iprint(optimze_expr e)
+    | optimze_stmt (Sprint e) = Sprint(optimze_expr e)
+    | optimze_stmt (Block(decs,sts)) = Block(decs, map optimze_stmt sts)
+    | optimze_stmt ast = ast
+  and optimze_expr (App(ope, Pair(Num a, Num b))) = 
+        (case ope of
+             Var "+" => Num(a + b)
+           | Var "-" => Num(a - b)
+           | Var "/" => Num(a div b)
+           | Var "*" => Num(a * b)
+           | els     => App(ope, Pair(Num a, Num b)))
+    | optimze_expr (Neg e) = optimze_expr e
+    | optimze_expr (App(v,e)) = optimze_expr e
+    | optimze_expr (Pair(e1,e2)) = Pair(optimze_expr e1, optimze_expr e2)
+    | optimze_expr a = a 
 end
 (* }}} *)
 
