@@ -637,10 +637,19 @@ structure Bytecode = struct
 
   fun conv_args types = foldl (op^) "" $ map conv_type types 
 
-  fun conv_inst (IntConst i) = "ldc " ^ (Int.toString i)
+  fun conv_inst (IntConst i) =
+        if 0 <= i andalso i <= 5 
+          then "iconst_" ^ (Int.toString i)
+          else "ldc " ^ (Int.toString i)
     | conv_inst (StrConst s) = "ldc \"" ^ s ^ "\""
-    | conv_inst (Load i) = "iload " ^ (Int.toString i)
-    | conv_inst (Store i) = "istore " ^ (Int.toString i)
+    | conv_inst (Load i) =
+        if 0 <= i andalso i <= 3 
+          then "iload_" ^ (Int.toString i)
+          else "iload " ^ (Int.toString i)
+    | conv_inst (Store i) = 
+        if 0 <= i andalso i <= 3 
+          then "istore_" ^ (Int.toString i)
+          else "istore " ^ (Int.toString i)
     | conv_inst (GetStatic (path, t)) = "getstatic "^ path ^ " " ^ (conv_type t)
     | conv_inst (InvokeVirtual(path, args, t)) = 
         "invokevirtual " ^ path ^ "(" ^ (conv_args args) ^ ")" ^ (conv_type t)
