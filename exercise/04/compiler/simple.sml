@@ -9,6 +9,7 @@ structure Lexer = struct
                  | WHILE | DO | FOR
                  | IF | ELSE 
                  | EQ | GE | LE | NEQ 
+                 | LAND | LOR
                  | SCAN | SPRINT | IPRINT 
                  | ID of string 
                  | NUM of int 
@@ -83,19 +84,21 @@ structure Lexer = struct
               let val s = str istream "" in
                 read istream; STRING s
               end)
-           else if (v = #"=" orelse v = #"!" orelse v = #"<" orelse v = #">") then
+           else if (v = #"=" orelse v = #"!" orelse v = #"<" orelse 
+                    v = #">" orelse v = #"|" orelse v = #"&") then
              (read istream;
              let val next = TextIO.lookahead istream in
                case next of
                     NONE      => ONE (String.str v)
                   | SOME nc   =>
-                      (if nc = #"=" then (read istream;()) else (); 
-                      case (v, nc) of
-                           (#"=",#"=") => EQ
-                         | (#"!",#"=") => NEQ
-                         | (#">",#"=") => GE
-                         | (#"<",#"=") => LE
-                         | (_,_)       => ONE (String.str v))
+                        case (v, nc) of
+                             (#"=",#"=") => (read istream;EQ)
+                           | (#"!",#"=") => (read istream;NEQ)
+                           | (#">",#"=") => (read istream;GE)
+                           | (#"<",#"=") => (read istream;LE)
+                           | (#"|",#"|") => (read istream;LOR)
+                           | (#"&",#"&") => (read istream;LAND)
+                           | (_,_)       => ONE (String.str v)
              end)
            else ONE (read istream)
   end
@@ -135,6 +138,8 @@ structure Lexer = struct
     | inspect (EOF)      = "EOF"
     | inspect (DO)       = "DO"
     | inspect (FOR)      = "FOR"
+    | inspect (LAND)     = "LAND"
+    | inspect (LOR)      = "LOR"
     | inspect (ONE c)    = ("ONE("^ c^ ")")
 
   fun print_token t = print $ inspect t
@@ -624,7 +629,6 @@ structure Bytecode = struct
                 | IfLe of label | IfLt of label 
                 | IfGe of label | IfGt of label 
                 | IfEq of label | IfNe of label
-                | And | Or | Xor 
                 | Return | IReturn
                 | Label of label
   type code = inst list
@@ -678,9 +682,6 @@ structure Bytecode = struct
     | conv_inst (IfGt l) = "ifgt " ^ l
     | conv_inst (IfEq l) = "ifeq " ^ l
     | conv_inst (IfNe l) = "ifne " ^ l
-    | conv_inst (And) = "iand"
-    | conv_inst (Or) = "ior"
-    | conv_inst (Xor) = "ixor"
     | conv_inst (Return) = "return"
     | conv_inst (IReturn) = "ireturn"
     | conv_inst (Label l) = l
