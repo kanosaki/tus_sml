@@ -249,31 +249,46 @@ structure Ast = struct
        | Inc s    => ( "Inc["^s^"]")
 
 
-  fun optimze_stmt (Def(s,e)) = Def(s, optimze_expr e)
-    | optimze_stmt (If(e, s1, s2)) = If(optimze_expr e, optimze_stmt s1,
+  fun optimize_stmt (Def(s,e)) = Def(s, optimize_expr e)
+    | optimize_stmt (If(e, s1, s2)) = If(optimize_expr e, optimize_stmt s1,
         case s2 of
-             SOME s => SOME $ optimze_stmt s 
+             SOME s => SOME $ optimize_stmt s 
            | NONE => NONE)
-    | optimze_stmt (While(e,s)) = While(optimze_expr e, optimze_stmt s)
-    | optimze_stmt (For(s,b,e,st)) = For(s,b,e,optimze_stmt st)
-    | optimze_stmt (Do(s,e)) = Do(optimze_stmt s, optimze_expr e)
-    | optimze_stmt (Iprint e) = Iprint(optimze_expr e)
-    | optimze_stmt (Sprint e) = Sprint(optimze_expr e)
-    | optimze_stmt (Block(decs,sts)) = Block(decs, map optimze_stmt sts)
-    | optimze_stmt ast = ast
-  and optimze_expr (App(ope, Pair(Num a, Num b))) = 
-        (case ope of
-             Var "+" => Num(a + b)
-           | Var "-" => Num(a - b)
-           | Var "/" => Num(a div b)
-           | Var "*" => Num(a * b)
-           | _       => App(ope, Pair(Num a, Num b)))
-    | optimze_expr (App(v,Pair(Var m, n))) = App(v, Pair(Var m, optimze_expr n))
-    | optimze_expr (App(v,Pair(n,Var m))) = App(v, Pair(optimze_expr n, Var m))
-    | optimze_expr (App(v,e)) = optimze_expr $ App(v,optimze_expr e)
-    | optimze_expr (Neg e) = Neg(optimze_expr e)
-    | optimze_expr (Pair(e1,e2)) = Pair(optimze_expr e1, optimze_expr e2)
-    | optimze_expr a = a 
+    | optimize_stmt (While(e,s)) = While(optimize_expr e, optimize_stmt s)
+    | optimize_stmt (For(s,b,e,st)) = For(s,b,e,optimize_stmt st)
+    | optimize_stmt (Do(s,e)) = Do(optimize_stmt s, optimize_expr e)
+    | optimize_stmt (Iprint e) = Iprint(optimize_expr e)
+    | optimize_stmt (Sprint e) = Sprint(optimize_expr e)
+    | optimize_stmt (Block(decs,sts)) = Block(decs, map optimize_stmt sts)
+    | optimize_stmt ast = ast
+  and optimize_expr (app as (App(v,e))) = 
+      let 
+        fun optimize_app (App(ope, Pair(Num a, Num b))) = 
+            (case ope of
+                 Var "+" => (true, Num(a + b))
+               | Var "-" => (true, Num(a - b))
+               | Var "/" => (true, Num(a div b))
+               | Var "*" => (true, Num(a * b))
+               | _       => (false, App(ope, Pair(Num a, Num b))))
+          | optimize_app (App(ope, pair)) = 
+              (case optimize_app pair of
+                    (b, e) => (b, App(ope, e)))
+          | optimize_app (Neg e) =
+              (case optimize_app e of 
+                    (b1, oe) => (b1, Neg(oe)))
+          | optimize_app (Pair(e1,e2)) =
+              (case (optimize_app e1, optimize_app e2) of
+                   ((b1, oe1), (b2, oe2)) => 
+                      ((b1 orelse b2) , Pair(oe1, oe2)))
+          | optimize_app a = (false, a)
+      in
+        case optimize_app app of
+             (true, e1) => optimize_expr e1
+           | (false, e1) => e1
+      end
+    | optimize_expr (Neg e) = Neg(optimize_expr e)
+    | optimize_expr (Pair(e1,e2)) = Pair(optimize_expr e1, optimize_expr e2)
+    | optimize_expr a = a
 end
 (* }}} *)
 
@@ -328,7 +343,7 @@ structure Parser = struct
     if (tok() = t) 
       then advance() 
       else error ("Missing "^(L.inspect t))
-  fun eat_lazy f (_:unit) = eat f
+  fun eat_lazy f () = eat f
   fun eatID () = 
     case tok() of
          (L.ID s)     => (advance(); s)
@@ -492,7 +507,37 @@ structure Parser = struct
        | L.ONE "("    => middle advance expr (eat_lazy(L.ONE ")"))
        | L.ONE "-"    => (advance(); A.Neg(expr()))
        | _            => error "Unknown factor"
-  and cond () = 
+  and cond () = or_expr()
+  and or_expr () = 
+    let val first_and = and_expr() in
+      or_expr' first_and
+    end
+  and or_expr' prev_expr = 
+    case tok() of
+         (L.LOR)    =>
+            (advance();
+            let val c_term = and_expr() in
+              or_expr' (A.App(A.Var("||"), A.Pair(prev_expr, c_term)))
+            end)
+       | _            => prev_expr
+
+  and and_expr () = 
+    let val first_expr = cond_factor() in
+      and_expr' first_expr 
+    end
+  and and_expr' prev_term = 
+    case tok() of
+         (L.LAND)    => 
+            (advance();
+            let val c_factor = cond_factor() in
+              term' (A.App(A.Var("&&"), A.Pair(prev_term, c_factor)))
+            end)
+       | _            => prev_term
+  and cond_factor () = 
+    case tok() of 
+         L.ONE "("    => middle advance or_expr (eat_lazy(L.ONE ")"))
+       | _            => cond_expr()
+  and cond_expr () = 
     case eval_three expr condop expr of
          (e1,cop,e2)  => A.App(cop, A.Pair(e1,e2))
   and condop () = 
@@ -761,6 +806,8 @@ structure Emitter = struct
   fun conv_label i = "L"^(Int.toString i)
 
   fun init () = (label := 0; out := nil)
+  fun push_label i = push (B.Label(conv_label i))
+  fun push_goto i = push (B.GoTo(conv_label i))
 
   fun emit_dec d env = 
     case d of
@@ -769,44 +816,47 @@ structure Emitter = struct
   and emit_stmt s env =
   let 
     fun lookup_var s = T.lookup s env
-    fun push_label i = push (B.Label(conv_label i))
-    fun push_goto i = push (B.GoTo(conv_label i))
   in
     case s of
          A.Def (s,e) => 
-           (emit_expr e env;
+           (emit_expr e env 0;
             push (B.Store(lookup_var s)))
        | A.If (c,s, opt) => 
            let 
-             val i = emit_expr c env
-             val j = incLabel()  
+             val mid = incLabel()
+             val bot = incLabel()
            in
+             emit_expr c env mid;
              emit_stmt s env;
              case opt of 
                   SOME s2 => 
-                    (push_goto j;
-                     push_label i;
+                    (push_goto bot;
+                     push_label mid;
                      emit_stmt s2 env;
-                     push_label j)
-                | NONE    => (push_label i)
+                     push_label bot)
+                | NONE    => (push_label mid)
            end
        | A.While (c,s)  => 
-           let val i = incLabel() in
-             push_label i;
-             let val j = emit_expr c env in
-               emit_stmt s env;
-               push_goto i;
-               push_label j
-             end
+           let 
+             val top = incLabel() 
+             val bot = incLabel()
+           in
+             push_label top;
+             emit_expr c env bot;
+             emit_stmt s env;
+             push_goto top;
+             push_label bot
            end
        | A.Do (s,e)     =>
-          let val do_start = incLabel() in
+          let 
+            val do_start = incLabel()
+            val do_end = incLabel()
+          in
             push_label do_start; (* Start *)
             emit_stmt s env;
-            let val do_end = emit_expr e env in
-              push_goto do_start;
-              push_label do_end
-            end
+            emit_expr e env do_end;
+            push_goto do_start;
+            push_label do_end
           end
        | A.For(var,begin_num,end_num,st) =>
            (let val env' = (lookup_var var;env) 
@@ -826,13 +876,13 @@ structure Emitter = struct
             end)
        | A.Sprint s     => 
            (push $ B.GetStatic("java/lang/System/out", B.Class("java/io/PrintStream"));
-            emit_expr s env;
+            emit_expr s env 0;
             push $ 
                  B.InvokeVirtual("java/io/PrintStream/print", 
                 [B.Class("java/lang/String")], B.V))
        | A.Iprint e     =>
            (push $ B.GetStatic("java/lang/System/out", B.Class("java/io/PrintStream"));
-            emit_expr e env;
+            emit_expr e env 0;
             push (B.InvokeVirtual("java/io/PrintStream/print", [B.I], B.V)))
        | A.Scan s       => 
            (push $ B.InvokeStatic("Scan/scan", nil, B.I);
@@ -845,58 +895,58 @@ structure Emitter = struct
              app (fn st => emit_stmt st env') l
            end
   end
-  and emit_expr ast env =
+  and emit_expr ast env jmp =
     case ast of
-         A.App (e1, e2) =>
-            (emit_expr e2 env;
+         A.App(A.Var("&&"), A.Pair(e1, e2)) => 
+         let 
+           val bot = incLabel()
+         in
+           emit_expr e1 env jmp; (* When first expression is false *)
+           emit_expr e2 env jmp
+         end
+       | A.App(A.Var("||"), A.Pair(e1, e2)) => 
+         let 
+           val mid = incLabel()
+           val bot = incLabel()
+         in
+           emit_expr e1 env mid; (* When first expression is false *)
+           push_label mid;
+           push_goto bot;
+           emit_expr e2 env jmp;
+           push_label bot
+         end
+       | A.App (e1, e2) =>
+            (emit_expr e2 env 0;
              case e1 of
-                  A.Var "+" => (push B.Add;0)
-                | A.Var "-" => (push B.Sub;0)
-                | A.Var "*" => (push B.Mul;0)
-                | A.Var "/" => (push B.Div;0)
-                | A.Var "!" => (push B.Neg;0)
-                | A.Var "%" => (push B.Rem;0)
+                  A.Var "+" => (push B.Add)
+                | A.Var "-" => (push B.Sub)
+                | A.Var "*" => (push B.Mul)
+                | A.Var "/" => (push B.Div)
+                | A.Var "!" => (push B.Neg)
+                | A.Var "%" => (push B.Rem)
                 | A.Var "^" => 
-                    (push (B.InvokeStatic("Aout/power", [B.I, B.I], B.I));0)
-                | A.Var "EQ" =>
-                    let val n = incLabel() in
-                      push (B.CmpNe(conv_label n));n
-                    end
-                | A.Var "NEQ" => 
-                    let val n = incLabel() in
-                      push (B.CmpEq(conv_label n));n
-                    end
-                | A.Var "GT" =>  
-                    let val n = incLabel() in
-                      push (B.CmpLe(conv_label n));n
-                    end
-                | A.Var "LT" => 
-                    let val n = incLabel() in
-                      push (B.CmpGe(conv_label n));n
-                    end
-                | A.Var "GE" => 
-                    let val n = incLabel() in
-                      push (B.CmpLt(conv_label n));n
-                    end
-                | A.Var "LE" => 
-                    let val n = incLabel() in
-                      push (B.CmpGt(conv_label n));n
-                    end
+                    (push (B.InvokeStatic("Aout/power", [B.I, B.I], B.I)))
+                | A.Var "EQ"  => push (B.CmpNe(conv_label jmp))
+                | A.Var "NEQ" => push (B.CmpEq(conv_label jmp))
+                | A.Var "GT"  => push (B.CmpLe(conv_label jmp))
+                | A.Var "LT"  => push (B.CmpGe(conv_label jmp))
+                | A.Var "GE"  => push (B.CmpLt(conv_label jmp))
+                | A.Var "LE"  => push (B.CmpGt(conv_label jmp))
                 | _          => raise InternalError)
-      | A.Pair (e1, e2) => (emit_expr e1 env; emit_expr e2 env)
-      | A.Var s => (push (B.Load(T.lookup s env));0)
-      | A.Num i => (push (B.IntConst i);0)
-      | A.String s => (push (B.StrConst s); 0)
-      | A.Neg e => (emit_expr e env; push (B.Neg);0)
+      | A.Pair (e1, e2) => (emit_expr e1 env 0; emit_expr e2 env 0)
+      | A.Var s => (push (B.Load(T.lookup s env)))
+      | A.Num i => (push (B.IntConst i))
+      | A.String s => (push (B.StrConst s))
+      | A.Neg e => (emit_expr e env 0; push (B.Neg))
       | A.Inc s => 
           let val var_num = T.lookup s env in
-            emit_expr (A.Var s) env; 
+            emit_expr (A.Var s) env 0; 
             push (B.IntConst 1);
             push B.Add;
             push (B.Store var_num);
-            push (B.Load var_num);
-            0
+            push (B.Load var_num)
           end
+
   val power_func = O.Raw("power",
     ".method static power(II)I\n"^
         "\t.limit locals 2\n"^
@@ -991,7 +1041,7 @@ end
 fun debug () = 
   (let 
      val ast = Parser.parse() 
-     val optimized_ast = Ast.optimze_stmt ast
+     val optimized_ast = Ast.optimize_stmt ast
    in
      print "--- AST:\n";
      Parser.print_stmt ast; 
