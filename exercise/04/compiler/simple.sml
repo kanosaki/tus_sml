@@ -530,7 +530,7 @@ structure Parser = struct
          (L.LAND)    => 
             (advance();
             let val c_factor = cond_factor() in
-              term' (A.App(A.Var("&&"), A.Pair(prev_term, c_factor)))
+              and_expr' (A.App(A.Var("&&"), A.Pair(prev_term, c_factor)))
             end)
        | _            => prev_term
   and cond_factor () = 
@@ -910,8 +910,8 @@ structure Emitter = struct
            val bot = incLabel()
          in
            emit_expr e1 env mid; (* When first expression is false *)
-           push_label mid;
            push_goto bot;
+           push_label mid;
            emit_expr e2 env jmp;
            push_label bot
          end
