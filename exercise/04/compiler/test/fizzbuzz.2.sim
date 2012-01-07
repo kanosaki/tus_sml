@@ -1,10 +1,8 @@
 {
     int a,u;
-    sprint("Enter FizzBuzz upper bound:");
     scan(u);
     if(u <= 0){
         u = 100;
-        sprint("FizzBuzz upper bound has been set to default.\n");
     }
     a = 1;
     while(a < u){

@@ -1,0 +1,6 @@
+{
+    iprint(2^3);
+    sprint("\n");
+    iprint(3^4);
+    sprint("\n");
+}

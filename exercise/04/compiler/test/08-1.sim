@@ -1,0 +1,6 @@
+{
+    for(x,0,9){
+        iprint(x);
+    } 
+    sprint("\n");
+}

@@ -1,0 +1,29 @@
+{
+    int a,t,f,u;
+    scan(u);
+    if(u <= 0){
+        u = 100;
+    }
+    a = 1;
+    t = 0;
+    f = 0;
+    while(a < u){
+        if(t == 2){
+          sprint("Fizz");
+          t = -1;
+        }
+        if(f == 4){
+          sprint("Buzz");
+          f = -1;
+        }
+        if(t != -1){
+          if(f != -1){
+            iprint(a);
+          }
+        }
+        t = t + 1;
+        f = f + 1;
+        a = a + 1;
+        sprint("\n");
+    }
+}

@@ -1,0 +1,9 @@
+{
+    int a;
+    a = 0;
+    do {
+       iprint(a);
+       a++;
+    } while (a < 10)
+    sprint("\n");
+}

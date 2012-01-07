@@ -1,0 +1,6 @@
+{
+    iprint(10%3);
+    sprint("\n");
+    iprint(18%4);
+    sprint("\n");
+}

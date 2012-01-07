@@ -1,0 +1,105 @@
+#!/usr/bin/env ruby
+#-*- encoding: utf-8 -*-
+require 'pp'
+class CaseFailuer < Exception
+  def initialize(msg, cas)
+    super(msg)
+    @cas = cas
+  end
+end
+
+class Talker
+  def initialize(path)
+    @path = path
+  end
+
+  def talk(msg, options={})
+    @pipe.puts(msg)    
+  end
+
+  def listen(msg, options={})
+    msg.split("\n").each do |m|
+      actual = @pipe.gets.chop
+      if options.include?(:regex)
+        result = actual =~ m
+      else 
+        result = actual == m
+      end
+      unless result
+        raise CaseFailuer.new("Expected:\n#{m.inspect}\nActual:\n#{actual.inspect}", self)
+      end
+    end
+  end
+
+  def start(io)
+    if @path 
+      io.gets # Ignore "Generated Aout.class"
+      @pipe = io
+      @contents = File.read(@path)
+      instance_eval @contents
+    end
+  end
+  
+  def self.null
+    @@null_talker ||= Talker.new(nil)
+  end
+
+  def self.find(sim_path)
+    talker_path = sim_path + ".rb"
+    if File.exist?(talker_path)
+      Talker.new(talker_path)
+    else  
+      Talker.null
+    end
+  end
+end
+
+class Case
+  def initialize(sim_path)
+    @sim_path = sim_path
+  end
+
+  def talker
+    @talker ||= Talker.find(@sim_path)
+  end
+
+  def name
+    File.basename(@sim_path, ".sim")
+  end
+
+  def run
+    IO.popen("./sc #{@sim_path}", "r+") do |io|
+      self.talker.start(io)
+    end
+  end
+end
+
+class Runner
+  def gather_case
+    @cases = Dir.glob("test/*.sim").map{|p| Case.new(p) }
+  end
+  
+  def start
+    failuers = self.body()
+    pp failuers unless failuers.empty?
+  end
+
+  protected
+  def body
+    fauluers = []
+    gather_case.each do |cas|
+      print "#{cas.name} ..."
+      begin
+        cas.run 
+        puts "OK"
+      rescue CaseFailuer => e
+        fauluers << e
+        puts "FAIL"
+      end
+    end
+    fauluers
+  end
+end
+
+runner = Runner.new
+runner.start
