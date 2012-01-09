@@ -626,9 +626,9 @@ structure Table = struct
         | size_expr (A.Var _) = (stack_move 1; setMaxSize())
         | size_expr (A.String _) = (stack_move 1; setMaxSize())
         | size_expr (A.App (_, e)) = 
-            (size_expr e; stack_move 1;setMaxSize())
+            (size_expr e; stack_move ~1)
         | size_expr (A.Pair (e1, e2)) = 
-            (size_expr e1; size_expr e2;stack_move ~2)
+            (size_expr e1; size_expr e2)
         | size_expr (A.Inc s) = 
             (stack_move 2; setMaxSize(); stack_move ~2)
         | size_expr (A.Neg e) = size_expr e
