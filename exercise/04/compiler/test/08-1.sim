@@ -1,6 +1,10 @@
 {
+    int x;
+    x = 20;
     for(x,0,9){
         iprint(x);
     } 
+    sprint("\n");
+    iprint(x);
     sprint("\n");
 }

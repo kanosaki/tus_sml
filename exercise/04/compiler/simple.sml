@@ -859,8 +859,7 @@ structure Emitter = struct
             push_label do_end
           end
        | A.For(var,begin_num,end_num,st) =>
-           (let val env' = (lookup_var var;env) 
-                  handle NoDeclaration => emit_dec (A.Dec([var])) env in
+           (let val env' = emit_dec (A.Dec([var])) env in
               emit_stmt (A.Def(var, A.Num(begin_num))) env';
               let 
                 val for_start_label = incLabel() 
