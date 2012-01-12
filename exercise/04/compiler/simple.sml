@@ -554,7 +554,9 @@ structure Parser = struct
   val print_stmt = print o A.inspect_stmt
   val print_expr = print o A.inspect_expr
 end
+(* }}} *)
 
+(* Table {{{ *)
 structure Table = struct
   structure A = Ast
   structure L = Lexer
@@ -625,6 +627,10 @@ structure Table = struct
       and size_expr (A.Num _) = (stack_move 1; setMaxSize())
         | size_expr (A.Var _) = (stack_move 1; setMaxSize())
         | size_expr (A.String _) = (stack_move 1; setMaxSize())
+        | size_expr (A.App(A.Var("^"), p)) = 
+            (size_expr p;
+             stack_move 1;
+             setMaxSize())
         | size_expr (A.App (_, e)) = 
             (size_expr e; stack_move ~1)
         | size_expr (A.Pair (e1, e2)) = 
@@ -643,12 +649,21 @@ structure Table = struct
       in
         List.foldl (fn (s,c) => c + localSize s) n ss 
       end
-    | localSize (A.If (_, s1, s2)) = 
+    | localSize (A.Def(_,e)) = localSize_expr e
+    | localSize (A.If (e, s1, s2)) = 
         (localSize s1) + (case s2 of SOME s => localSize s | NONE => 0)
-    | localSize (A.While (_, s))   = localSize s
-    | localSize (A.Do (s,_)) = localSize s
+        + (localSize_expr e)
+    | localSize (A.While (e, s))   = (localSize s) + (localSize_expr e)
+    | localSize (A.Do (s,e)) = (localSize s) + (localSize_expr e)
     | localSize (A.For(_,_,_,s)) = 1 + (localSize s)
+    | localSize (A.Iprint(e)) = localSize_expr e
+    | localSize (A.Sprint(e)) = localSize_expr e
     | localSize _   = 0
+  and localSize_expr (A.Var("^")) = 2
+    | localSize_expr (A.App(e1, e2)) = (localSize_expr e1) + (localSize_expr e2)
+    | localSize_expr (A.Neg(e)) = localSize_expr e
+    | localSize_expr (A.Pair(e1,e2)) = (localSize_expr e1) + (localSize_expr e2)
+    | localSize_expr _ = 0
 
   fun calc_size ast = (localSize ast, stackSize ast)
 end
@@ -677,6 +692,11 @@ structure Bytecode = struct
                 | Return | IReturn
                 | Label of label
   type code = inst list
+
+  fun intToString i = 
+    if i < 0 
+      then "-"^(Int.toString(Int.abs i))
+      else Int.toString i
 
   fun conv_type I = "I"
     | conv_type V = "V"
@@ -708,7 +728,7 @@ structure Bytecode = struct
         "invokestatic " ^ path ^ "(" ^ (conv_args args) ^ ")" ^ (conv_type t)
     | conv_inst (GoTo s) = "goto " ^ s
     | conv_inst (Increase(loc, v)) = 
-        "iinc "^(Int.toString loc)^" "^(Int.toString v)
+        "iinc "^(Int.toString loc)^" "^(intToString v)
     | conv_inst Add = "iadd"
     | conv_inst Sub = "isub"
     | conv_inst Mul = "imul"
@@ -924,7 +944,24 @@ structure Emitter = struct
                 | A.Var "!" => (push B.Neg)
                 | A.Var "%" => (push B.Rem)
                 | A.Var "^" => 
-                    (push (B.InvokeStatic("Aout/power", [B.I, B.I], B.I)))
+                    let 
+                      val label_start = incLabel()
+                      val label_end = incLabel()
+                    in
+                      push $ B.IntConst(1);
+                      push $ B.Sub;
+                      push $ B.Store(1);
+                      push $ B.Store(2);
+                      push $ B.Load(2);
+                      push_label label_start;
+                      push $ B.Load(2);
+                      push $ B.Mul;
+                      push $ B.Increase(1,~1);
+                      push $ B.Load(1);
+                      push $ B.IfLe(conv_label label_end);
+                      push $ B.GoTo(conv_label label_start);
+                      push_label label_end
+                    end
                 | A.Var "EQ"  => push (B.CmpNe(conv_label jmp))
                 | A.Var "NEQ" => push (B.CmpEq(conv_label jmp))
                 | A.Var "GT"  => push (B.CmpLe(conv_label jmp))
@@ -945,7 +982,7 @@ structure Emitter = struct
             push (B.Store var_num);
             push (B.Load var_num)
           end
-
+  (*
   val power_func = O.Raw("power",
     ".method static power(II)I\n"^
         "\t.limit locals 2\n"^
@@ -962,7 +999,7 @@ structure Emitter = struct
     "L_END:\n"^
         "\tireturn\n"^
     ".end method\n")
-  
+  *) 
   fun generate ast = (emit_stmt ast T.init; B.Return :: (!out)) 
 
   fun emit_optimize ast outstream = 
@@ -971,13 +1008,7 @@ structure Emitter = struct
     val (szLocal, szStack) = T.calc_size ast
     val main = 
       O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
-    val is_emit_pow = 
-      List.exists 
-        (fn x => case x of
-                      (B.InvokeStatic ("Aout/power",_,_)) => true 
-                    | _ => false) main_code
-    val pool = 
-      O.Pool(outstream, (if is_emit_pow then [main, power_func] else [main]))
+    val pool = O.Pool(outstream, [main])
   in
     O.flush pool
   end
@@ -988,13 +1019,7 @@ structure Emitter = struct
     val (szLocal, szStack) = T.calc_size ast
     val main = 
       O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
-    val is_emit_pow = 
-      List.exists 
-        (fn x => case x of
-                      (B.InvokeStatic ("Aout/power",_,_)) => true 
-                    | _ => false) main_code
-    val pool = 
-      O.Pool(outstream, (if is_emit_pow then [main, power_func] else [main]))
+    val pool = O.Pool(outstream, [main])
   in
     O.flush pool
   end
