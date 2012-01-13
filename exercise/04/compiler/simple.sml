@@ -114,7 +114,7 @@ structure Lexer = struct
       end
   and drop_comment istream = 
         if (read istream) = "\n" 
-          then () 
+          then proceed_line() 
           else drop_comment istream
   and getpack istream = 
       let val tok = gettoken istream in
