@@ -335,7 +335,7 @@ structure Parser = struct
 
   fun error msg  =
   let val msg = ("SYNTAX ERROR!!\n"^msg^"\nLine:"^(Int.toString (line_number()))^
-              " LAST TOKEN:"^(L.inspect (tok())))
+              " LAST TOKEN:"^(L.inspect (back();tok())))
   in (raise SyntaxError msg) 
   end
 
