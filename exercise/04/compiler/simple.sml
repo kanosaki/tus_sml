@@ -248,7 +248,6 @@ structure Ast = struct
        | Neg e    => ( "Neg["^ inspect_expr e^  "] ")
        | Inc s    => ( "Inc["^s^"]")
 
-
   fun optimize_stmt (Def(s,e)) = Def(s, optimize_expr e)
     | optimize_stmt (If(e, s1, s2)) = If(optimize_expr e, optimize_stmt s1,
         case s2 of
@@ -270,6 +269,15 @@ structure Ast = struct
                | Var "/" => (true, Num(a div b))
                | Var "*" => (true, Num(a * b))
                | _       => (false, App(ope, Pair(Num a, Num b))))
+          | optimize_app (app as (App(Var ope1, Pair(App(Var ope2, Pair(Var a, Num b)), Num c)))) =
+              (case (ope1, ope2) of
+                   ("+", "+") => (true, App(Var ope1, Pair(Var a, Num(c + b))))
+                 | ("-", "-") => (true, App(Var ope1, Pair(Var a, Num(c + b))))
+                 | ("+", "-") => (true, App(Var ope1, Pair(Var a, Num(b - c))))
+                 | ("-", "+") => (true, App(Var ope1, Pair(Var a, Num(c - b))))
+                 | ("*", "*") => (true, App(Var ope1, Pair(Var a, Num(c * b))))
+                 | ("/", "/") => (true, App(Var ope1, Pair(Var a, Num(c div b))))
+                 | _  => (false, app))
           | optimize_app (App(ope, pair)) = 
               (case optimize_app pair of
                     (b, e) => (b, App(ope, e)))
