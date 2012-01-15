@@ -716,17 +716,17 @@ structure Bytecode = struct
 
   fun conv_inst (IntConst i) =
         if 0 <= i andalso i <= 5 
-          then "iconst_" ^ (Int.toString i)
-          else "ldc " ^ (Int.toString i)
+          then "iconst_" ^ (intToString i)
+          else "ldc " ^ (intToString i)
     | conv_inst (StrConst s) = "ldc \"" ^ s ^ "\""
     | conv_inst (Load i) =
         if 0 <= i andalso i <= 3 
-          then "iload_" ^ (Int.toString i)
-          else "iload " ^ (Int.toString i)
+          then "iload_" ^ (intToString i)
+          else "iload " ^ (intToString i)
     | conv_inst (Store i) = 
         if 0 <= i andalso i <= 3 
-          then "istore_" ^ (Int.toString i)
-          else "istore " ^ (Int.toString i)
+          then "istore_" ^ (intToString i)
+          else "istore " ^ (intToString i)
     | conv_inst (GetStatic (path, t)) = "getstatic "^ path ^ " " ^ (conv_type t)
     | conv_inst (InvokeVirtual(path, args, t)) = 
         "invokevirtual " ^ path ^ "(" ^ (conv_args args) ^ ")" ^ (conv_type t)
@@ -990,24 +990,7 @@ structure Emitter = struct
             push (B.Store var_num);
             push (B.Load var_num)
           end
-  (*
-  val power_func = O.Raw("power",
-    ".method static power(II)I\n"^
-        "\t.limit locals 2\n"^
-        "\t.limit stack 2\n\n"^
-        "\tiinc 1 -1\n"^
-        "\tiload_0\n"^
-    "L_START:\n"^
-        "\tiload_0\n"^
-        "\timul\n"^
-        "\tiinc 1 -1\n"^
-        "\tiload_1\n"^
-        "\tifle L_END\n"^
-        "\tgoto L_START\n"^
-    "L_END:\n"^
-        "\tireturn\n"^
-    ".end method\n")
-  *) 
+
   fun generate ast = (emit_stmt ast T.init; B.Return :: (!out)) 
 
   fun emit_optimize ast outstream = 
@@ -1023,7 +1006,7 @@ structure Emitter = struct
 
   fun emit ast outstream = 
   let 
-    val main_code = (init();generate ast)
+    val main_code = (init();B.optimize $ generate ast)
     val (szLocal, szStack) = T.calc_size ast
     val main = 
       O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
@@ -1055,7 +1038,7 @@ let
        | (hd::tl)   => 
            (Parser.init $ TextIO.openIn hd;
             let 
-              val ast = Parser.parse() 
+              val ast = Ast.optimize_stmt $ Parser.parse() 
               val ostream = TextIO.openOut "tmp.j"
             in
               Emitter.emit ast ostream;
