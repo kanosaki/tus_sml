@@ -11,15 +11,19 @@ end
 class Talker
   def initialize(path)
     @path = path
+    @log = []
   end
 
   def talk(msg, options={})
+    push_talk_msg(msg)
     @pipe.puts(msg)    
   end
 
   def listen(msg, options={})
     msg.split("\n").each do |m|
-      actual = @pipe.gets.chop
+      echo = @pipe.gets
+      actual = echo.chop
+      @log << actual
       if options.include?(:regex)
         result = actual =~ m
       else 
@@ -40,6 +44,21 @@ class Talker
     end
   end
   
+  def log
+    @log.join("\n") + "\n"
+  end
+
+  protected
+
+  def push_talk_msg(msg)
+    if @log.empty?
+      @log << msg
+    else
+      last_log = @log.pop.chop
+      @log << last_log + msg
+    end
+  end
+
   def self.null
     @@null_talker ||= Talker.new(nil)
   end
@@ -57,6 +76,15 @@ end
 class Case
   def initialize(sim_path)
     @sim_path = sim_path
+  end
+
+  def export(out)
+    out.puts "==== TEST CASE ============================="
+    out.puts "  Name: #{self.name}"
+    out.puts "  Path: #{@sim_path}"
+    out.puts "---- EXECUTE LOG ---------------------------"
+    out.write(@talker.log)
+    out.puts "=============================================\n"
   end
 
   def talker
@@ -92,6 +120,7 @@ class Runner
       begin
         cas.run 
         puts "OK"
+        cas.export($stdout)
       rescue CaseFailuer => e
         fauluers << e
         puts "FAIL"
