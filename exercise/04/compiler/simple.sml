@@ -790,13 +790,12 @@ structure Bytecode = struct
     | ref_localnumber (Store i) = i
     | ref_localnumber (Increase(i,_)) = i
     | ref_localnumber _ = 0
-
   
   fun acu_max f vals =
   let
     fun inner nil _ max = max
       | inner (x::xs) prev max = 
-        let val r = f x in
+        let val r = f x + prev in
           inner xs r (Int.max(r, max))
         end
   in
@@ -804,7 +803,7 @@ structure Bytecode = struct
   end
 
   fun count_stacksize insts = acu_max stack_delta insts
-  fun count_localsize insts = foldl Int.max 0 $ map ref_localnumber insts
+  fun count_localsize insts = (foldl Int.max ~1 $ map ref_localnumber insts) + 1
 
   (* NOTE: Instructions are reversed. *)
   fun optimize ((Store i)::(Load j)::xs) =
