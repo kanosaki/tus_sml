@@ -758,7 +758,54 @@ structure Bytecode = struct
     | conv_inst (Return) = "return"
     | conv_inst (IReturn) = "ireturn"
     | conv_inst (Label l) = l
+
+  fun stack_delta (IntConst _) = 1
+    | stack_delta (StrConst _) = 1
+    | stack_delta (Load _) = 1
+    | stack_delta (Store _) = ~1
+    | stack_delta (GetStatic(_,_)) = 1
+    | stack_delta (InvokeVirtual(_,args,_)) = ~(length args) 
+    | stack_delta (InvokeStatic(_,args,_)) = ~(length args) + 1
+    | stack_delta (InvokeNonVirtual(_,args,_)) = ~(length args)
+    | stack_delta (Add) = ~1
+    | stack_delta (Sub) = ~1
+    | stack_delta (Mul) = ~1
+    | stack_delta (Div) = ~1
+    | stack_delta (Rem) = ~1
+    | stack_delta (CmpLe _) = ~2
+    | stack_delta (CmpLt _) = ~2
+    | stack_delta (CmpGe _) = ~2
+    | stack_delta (CmpGt _) = ~2
+    | stack_delta (CmpEq _) = ~2
+    | stack_delta (CmpNe _) = ~2
+    | stack_delta (IfLe _) = ~2
+    | stack_delta (IfLt _) = ~2
+    | stack_delta (IfGe _) = ~2
+    | stack_delta (IfGt _) = ~2
+    | stack_delta (IfEq _) = ~2
+    | stack_delta (IfNe _) = ~2
+    | stack_delta _ = 0
+
+  fun ref_localnumber (Load i) = i
+    | ref_localnumber (Store i) = i
+    | ref_localnumber (Increase(i,_)) = i
+    | ref_localnumber _ = 0
+
   
+  fun acu_max f vals =
+  let
+    fun inner nil _ max = max
+      | inner (x::xs) prev max = 
+        let val r = f x in
+          inner xs r (Int.max(r, max))
+        end
+  in
+    inner vals 0 0 
+  end
+
+  fun count_stacksize insts = acu_max stack_delta insts
+  fun count_localsize insts = foldl Int.max 0 $ map ref_localnumber insts
+
   (* NOTE: Instructions are reversed. *)
   fun optimize ((Store i)::(Load j)::xs) =
         if i = j
@@ -925,12 +972,8 @@ structure Emitter = struct
   and emit_expr ast env jmp =
     case ast of
          A.App(A.Var("&&"), A.Pair(e1, e2)) => 
-         let 
-           val bot = incLabel()
-         in
-           emit_expr e1 env jmp; (* When first expression is false *)
-           emit_expr e2 env jmp
-         end
+           (emit_expr e1 env jmp; 
+           emit_expr e2 env jmp)
        | A.App(A.Var("||"), A.Pair(e1, e2)) => 
          let 
            val mid = incLabel()
