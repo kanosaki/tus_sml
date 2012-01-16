@@ -1,6 +1,4 @@
-talk "50"
-
-listen <<-EOS
+50
 1
 2
 Fizz
@@ -50,5 +48,3 @@ FizzBuzz
 47
 Fizz
 49
-EOS
-export :default

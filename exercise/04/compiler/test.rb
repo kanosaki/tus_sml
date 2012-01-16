@@ -43,6 +43,18 @@ class Talker
       instance_eval @contents
     end
   end
+
+  def export(rel_path)
+    if rel_path == :default 
+      name = File.basename(@path, ".sim.rb")
+      path = File.join(File.dirname(@path), "../log/", "#{name}.log")
+    else 
+      path = File.join(@path, rel_path)
+    end
+    open(path, "w") do |f|
+      f.write(self.log)
+    end
+  end
   
   def log
     @log.join("\n") + "\n"

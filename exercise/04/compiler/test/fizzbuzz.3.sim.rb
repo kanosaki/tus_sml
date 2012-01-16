@@ -51,3 +51,4 @@ FizzBuzz
 Fizz
 49
 EOS
+export :default
