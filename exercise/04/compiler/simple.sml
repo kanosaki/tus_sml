@@ -582,6 +582,8 @@ structure Table = struct
           then n
           else lookup x es
 
+  fun length env = List.length env
+
   fun stackSize ast = 
     let 
       val stack = ref 0
@@ -995,19 +997,21 @@ structure Emitter = struct
                 | A.Var "%" => (push B.Rem)
                 | A.Var "^" => 
                     let 
+                      val x = T.length env;
+                      val y = (T.length env) + 1;
                       val label_start = incLabel()
                       val label_end = incLabel()
                     in
                       push $ B.IntConst(1);
                       push $ B.Sub;
-                      push $ B.Store(1);
-                      push $ B.Store(2);
-                      push $ B.Load(2);
+                      push $ B.Store(y);
+                      push $ B.Store(x);
+                      push $ B.Load(x);
                       push_label label_start;
-                      push $ B.Load(2);
+                      push $ B.Load(x);
                       push $ B.Mul;
-                      push $ B.Increase(1,~1);
-                      push $ B.Load(1);
+                      push $ B.Increase(y,~1);
+                      push $ B.Load(y);
                       push $ B.IfLe(conv_label label_end);
                       push $ B.GoTo(conv_label label_start);
                       push_label label_end
