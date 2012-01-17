@@ -761,52 +761,6 @@ structure Bytecode = struct
     | conv_inst (IReturn) = "ireturn"
     | conv_inst (Label l) = l
 
-  fun stack_delta (IntConst _) = 1
-    | stack_delta (StrConst _) = 1
-    | stack_delta (Load _) = 1
-    | stack_delta (Store _) = ~1
-    | stack_delta (GetStatic(_,_)) = 1
-    | stack_delta (InvokeVirtual(_,args,_)) = ~(length args) 
-    | stack_delta (InvokeStatic(_,args,_)) = ~(length args) + 1
-    | stack_delta (InvokeNonVirtual(_,args,_)) = ~(length args)
-    | stack_delta (Add) = ~1
-    | stack_delta (Sub) = ~1
-    | stack_delta (Mul) = ~1
-    | stack_delta (Div) = ~1
-    | stack_delta (Rem) = ~1
-    | stack_delta (CmpLe _) = ~2
-    | stack_delta (CmpLt _) = ~2
-    | stack_delta (CmpGe _) = ~2
-    | stack_delta (CmpGt _) = ~2
-    | stack_delta (CmpEq _) = ~2
-    | stack_delta (CmpNe _) = ~2
-    | stack_delta (IfLe _) = ~2
-    | stack_delta (IfLt _) = ~2
-    | stack_delta (IfGe _) = ~2
-    | stack_delta (IfGt _) = ~2
-    | stack_delta (IfEq _) = ~2
-    | stack_delta (IfNe _) = ~2
-    | stack_delta _ = 0
-
-  fun ref_localnumber (Load i) = i
-    | ref_localnumber (Store i) = i
-    | ref_localnumber (Increase(i,_)) = i
-    | ref_localnumber _ = 0
-  
-  fun acu_max f vals =
-  let
-    fun inner nil _ max = max
-      | inner (x::xs) prev max = 
-        let val r = f x + prev in
-          inner xs r (Int.max(r, max))
-        end
-  in
-    inner vals 0 0 
-  end
-
-  fun count_stacksize insts = acu_max stack_delta (List.rev insts)
-  fun count_localsize insts = (foldl Int.max ~1 $ map ref_localnumber (List.rev insts)) + 1
-
   (* NOTE: Instructions are reversed. *)
   fun optimize ((Store i)::(Load j)::xs) =
         if i = j
@@ -1053,8 +1007,7 @@ structure Emitter = struct
   fun emit ast outstream = 
   let 
     val main_code = (init();B.optimize $ generate ast)
-    val szStack = Bytecode.count_stacksize main_code
-    val szLocal = Bytecode.count_localsize main_code
+    val (szLocal, szStack) = T.calc_size ast
     val main = 
       O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
     val pool = O.Pool(outstream, [main])
