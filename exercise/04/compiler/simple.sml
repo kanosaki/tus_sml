@@ -804,8 +804,8 @@ structure Bytecode = struct
     inner vals 0 0 
   end
 
-  fun count_stacksize insts = acu_max stack_delta insts
-  fun count_localsize insts = (foldl Int.max ~1 $ map ref_localnumber insts) + 1
+  fun count_stacksize insts = acu_max stack_delta (List.rev insts)
+  fun count_localsize insts = (foldl Int.max ~1 $ map ref_localnumber (List.rev insts)) + 1
 
   (* NOTE: Instructions are reversed. *)
   fun optimize ((Store i)::(Load j)::xs) =
@@ -1053,7 +1053,8 @@ structure Emitter = struct
   fun emit ast outstream = 
   let 
     val main_code = (init();B.optimize $ generate ast)
-    val (szLocal, szStack) = T.calc_size ast
+    val szStack = Bytecode.count_stacksize main_code
+    val szLocal = Bytecode.count_localsize main_code
     val main = 
       O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
     val pool = O.Pool(outstream, [main])
