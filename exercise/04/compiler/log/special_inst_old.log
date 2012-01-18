@@ -1,0 +1,167 @@
+Standard ML of New Jersey v110.73 [built: Sun Sep 18 22:27:19 2011]
+[opening simple.sml]
+[autoloading]
+[library $SMLNJ-BASIS/basis.cm is stable]
+[autoloading done]
+simple.sml:370.42 Warning: calling polyEqual
+structure Lexer :
+  sig
+    datatype token
+      = ELSE
+      | EOF
+      | EQ
+      | GE
+      | ID of string
+      | IF
+      | INT
+      | IPRINT
+      | LE
+      | NEQ
+      | NUM of int
+      | ONE of string
+      | SCAN
+      | SPRINT
+      | STRING of string
+      | WHILE
+    val read : TextIO.instream -> string
+    val integer : TextIO.instream -> int -> int
+    val identifier : TextIO.instream -> string -> string
+    val str : TextIO.instream -> string -> string
+    val native_token : TextIO.instream -> token
+    val gettoken : TextIO.instream -> token
+    val print_token : token -> unit
+    exception EndOfStream
+    val run : unit -> unit
+  end
+structure Ast :
+  sig
+    datatype dec = Dec of string list | NilDec
+    datatype stmt
+      = Block of dec * stmt list
+      | Def of string * expr
+      | If of expr * stmt * stmt option
+      | Iprint of expr
+      | NilStmt
+      | Scan of string
+      | Sprint of expr
+      | While of expr * stmt
+    datatype expr
+      = App of expr * expr
+      | Num of int
+      | Pair of expr * expr
+      | String of string
+      | Var of string
+  end
+val middle = fn : (unit -> 'a) -> (unit -> 'b) -> (unit -> 'c) -> 'b
+val follows = fn : (unit -> 'a) -> (unit -> 'b) list -> 'a
+val lazy = fn : 'a -> unit -> 'a
+val eval_three = fn
+  : (unit -> 'a) -> (unit -> 'b) -> (unit -> 'c) -> 'a * 'b * 'c
+structure Parser :
+  sig
+    structure L : <sig>
+    structure A : <sig>
+    val istream : TextIO.instream ref
+    val getToken : unit -> Lexer.token
+    val tok : Lexer.token ref
+    val advance : unit -> unit
+    exception SyntaxError
+    val error : unit -> 'a
+    val eat : Lexer.token -> unit
+    val eat_lazy : Lexer.token -> unit -> unit
+    val eatID : unit -> string
+    val eatNUM : unit -> Ast.expr
+    val eatSTR : unit -> Ast.expr
+    val parse : unit -> Ast.stmt
+    val dec : unit -> Ast.dec
+    val ids : unit -> string list
+    val ids' : unit -> string list
+    val stmts : unit -> Ast.stmt list
+    val stmt : unit -> Ast.stmt
+    val else_opt : unit -> Ast.stmt option
+    val expr : unit -> Ast.expr
+    val expr' : Ast.expr -> Ast.expr
+    val term : unit -> Ast.expr
+    val term' : Ast.expr -> Ast.expr
+    val factor : unit -> Ast.expr
+    val cond : unit -> Ast.expr
+    val condop : unit -> Ast.expr
+    val print_dec : Ast.dec -> unit
+    val print_stmt : Ast.stmt -> unit
+    val print_expr : Ast.expr -> unit
+  end
+structure Table :
+  sig
+    structure A : <sig>
+    structure L : <sig>
+    exception NoDeclaration
+    val init : 'a -> 'b
+    val update : ''a -> 'b -> (''a -> 'b) -> ''a -> 'b
+    val varAddr : int ref
+    val nextAddr : unit -> int
+    val stack : int ref
+    val stack_move : int -> unit
+    val maxStack : int ref
+    val setMaxSize : unit -> unit
+    val stackSize : Ast.stmt -> unit
+    val stackSize_expr : Ast.expr -> unit
+    val localSize : Ast.stmt -> int
+    val reset : unit -> unit
+  end
+structure Emitter :
+  sig
+    structure A : <sig>
+    structure T : <sig>
+    exception InternalError
+    val ostream : TextIO.outstream ref
+    val out : TextIO.vector -> unit
+    val out_m : string -> unit
+    val out_label : int -> unit
+    val out_proc : string list -> unit
+    val out_goto : int -> unit
+    val lookup_var : ('a -> int) -> 'a -> string
+    val is_emit_power_func : bool ref
+    val label : int ref
+    val incLabel : unit -> int
+    val emit_dec : Ast.dec -> (string -> int) -> string -> int
+    val emit_stmt : Ast.stmt -> (string -> int) -> unit
+    val emit_expr : Ast.expr -> (string -> int) -> int
+    val emit_power_func : unit -> unit
+    val emit : Ast.stmt -> int -> int -> unit
+    val reset : unit -> unit
+  end
+val test = fn : unit -> OS.Process.status
+val err = fn : TextIO.vector -> unit
+val main = fn : string * string list -> OS.Process.status
+val debug = fn : unit -> unit
+- debug();
+{int a,b; a = 1; b = 2; iprint(a + b);}$ 
+--- AST:
+Block[ Dec[ a b ]Def(a,Num 1) Def(b,Num 2) Iprint(App(Var +,Pair(Var a,Var b))) ]
+--- Java Bytecode:
+.class synchronized Aout
+.super java/lang/Object
+.method <init>()V
+	.limit locals 1
+	.limit stack 1
+	aload_0
+	invokenonvirtual java/lang/Object.<init>()V
+	return
+.end method
+
+.method public static main([Ljava/lang/String;)V
+	.limit locals 3
+	.limit stack 3
+	ldc 1
+	istore 1
+	ldc 2
+	istore 2
+	getstatic java/lang/System/out Ljava/io/PrintStream;
+	iload 1
+	iload 2
+	iadd
+	invokevirtual java/io/PrintStream/print(I)V
+	return
+.end method
+val it = () : unit
+- -
