@@ -1072,3 +1072,4 @@ fun debug () =
    | (Table.NoDeclaration s) => (print ("SYNTAX ERROR: Undeclared variable!!"^s^"\n"))
    | _ => (print "Unknown Error.\n"))
 
+(* vim: ft=sml *)
