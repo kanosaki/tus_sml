@@ -1006,7 +1006,7 @@ structure Emitter = struct
 
   fun emit ast outstream = 
   let 
-    val main_code = (init();B.optimize $ generate ast)
+    val main_code = (init(); generate ast)
     val (szLocal, szStack) = T.calc_size ast
     val main = 
       O.Function("main", [B.Array(B.String)], B.V, szLocal + 1, szStack, main_code)
@@ -1041,7 +1041,7 @@ let
               val ast = Ast.optimize_stmt $ Parser.parse() 
               val ostream = TextIO.openOut "tmp.j"
             in
-              Emitter.emit ast ostream;
+              Emitter.emit_optimize ast ostream;
               TextIO.closeOut ostream;
               OS.Process.system "jasmin tmp.j"
             end 
