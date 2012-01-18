@@ -1,0 +1,294 @@
+Standard ML of New Jersey v110.73 [built: Sun Sep 18 22:27:19 2011]
+[opening simple.sml]
+[autoloading]
+[library $SMLNJ-BASIS/basis.cm is stable]
+[autoloading done]
+val $ = fn : ('a -> 'b) * 'a -> 'b
+infixr $
+structure Lexer :
+  sig
+    datatype token
+      = DO
+      | ELSE
+      | EOF
+      | EQ
+      | FOR
+      | GE
+      | ID of string
+      | IF
+      | INT
+      | IPRINT
+      | LAND
+      | LE
+      | LOR
+      | NEQ
+      | NUM of int
+      | ONE of string
+      | SCAN
+      | SPRINT
+      | STRING of string
+      | WHILE
+    datatype pack = Pack of token * int
+    val current_line : int ref
+    val read : TextIO.instream -> string
+    val integer : TextIO.instream -> int -> int
+    val identifier : TextIO.instream -> string -> string
+    val str : TextIO.instream -> string -> string
+    val native_token : TextIO.instream -> token
+    val proceed_line : unit -> unit
+    val gettoken : TextIO.instream -> token
+    val drop_comment : TextIO.instream -> unit
+    val getpack : TextIO.instream -> token * int
+    val inspect : token -> string
+    val print_token : token -> unit
+    exception EndOfStream
+    val run : unit -> unit
+  end
+structure Source :
+  sig
+    structure L : <sig>
+    exception Error
+    datatype source
+      = Src of TextIO.instream * (Lexer.token * int) list * 
+               (Lexer.token * int) list
+    val next : source -> (Lexer.token * int) * source
+    val advance : source -> source
+    val getCurrent : source -> Lexer.token * int
+    val getToken : source -> Lexer.token
+    val getLine : source -> int
+    val back : source -> source
+    val init : TextIO.instream -> source
+  end
+structure Ast :
+  sig
+    datatype dec = Dec of string list | NilDec
+    datatype stmt
+      = Block of dec * stmt list
+      | Def of string * expr
+      | Do of stmt * expr
+      | For of string * int * int * stmt
+      | If of expr * stmt * stmt option
+      | Iprint of expr
+      | NilStmt
+      | Scan of string
+      | Sprint of expr
+      | While of expr * stmt
+    datatype expr
+      = App of expr * expr
+      | Inc of string
+      | Neg of expr
+      | Num of int
+      | Pair of expr * expr
+      | String of string
+      | Var of string
+    val inspect_dec : dec -> string
+    val inspect_stmt : stmt -> string
+    val inspect_expr : expr -> string
+    val optimize_stmt : stmt -> stmt
+    val optimize_expr : expr -> expr
+  end
+val middle = fn : (unit -> 'a) -> (unit -> 'b) -> (unit -> 'c) -> 'b
+val follows = fn : (unit -> 'a) -> (unit -> 'b) list -> 'a
+val lazy = fn : 'a -> unit -> 'a
+val eval_three = fn
+  : (unit -> 'a) -> (unit -> 'b) -> (unit -> 'c) -> 'a * 'b * 'c
+structure Parser :
+  sig
+    structure L : <sig>
+    structure A : <sig>
+    structure S : <sig>
+    exception SyntaxError of string
+    val source : Source.source ref
+    val tok : unit -> Lexer.token
+    val line_number : unit -> int
+    val advance : unit -> unit
+    val back : unit -> Source.source
+    val init : TextIO.instream -> unit
+    val error : string -> 'a
+    val eat : Lexer.token -> unit
+    val eat_lazy : Lexer.token -> unit -> unit
+    val eatID : unit -> string
+    val eatNUM : unit -> Ast.expr
+    val eatSTR : unit -> Ast.expr
+    val parse : unit -> Ast.stmt
+    val dec : unit -> Ast.dec
+    val ids : unit -> string list
+    val ids' : unit -> string list
+    val stmts : unit -> Ast.stmt list
+    val stmt : unit -> Ast.stmt
+    val else_opt : unit -> Ast.stmt option
+    val expr : unit -> Ast.expr
+    val expr' : Ast.expr -> Ast.expr
+    val term : unit -> Ast.expr
+    val term' : Ast.expr -> Ast.expr
+    val factor : unit -> Ast.expr
+    val cond : unit -> Ast.expr
+    val or_expr : unit -> Ast.expr
+    val or_expr' : Ast.expr -> Ast.expr
+    val and_expr : unit -> Ast.expr
+    val and_expr' : Ast.expr -> Ast.expr
+    val cond_factor : unit -> Ast.expr
+    val cond_expr : unit -> Ast.expr
+    val condop : unit -> Ast.expr
+    val print_dec : Ast.dec -> unit
+    val print_stmt : Ast.stmt -> unit
+    val print_expr : Ast.expr -> unit
+  end
+structure Table :
+  sig
+    structure A : <sig>
+    structure L : <sig>
+    exception NoDeclaration of string
+    datatype entry = Entry of int * string
+    val init : entry list
+    val update : string -> entry list -> entry list
+    val lookup : string -> entry list -> int
+    val length : 'a list -> int
+    val stackSize : Ast.stmt -> int
+    val localSize : Ast.stmt -> int
+    val localSize_expr : Ast.expr -> int
+    val calc_size : Ast.stmt -> int * int
+  end
+structure Bytecode :
+  sig
+    datatype java_type = Array of java_type | Class of string | I | String | V
+    type label = string
+    datatype inst
+      = Add
+      | CmpEq of label
+      | CmpGe of label
+      | CmpGt of label
+      | CmpLe of label
+      | CmpLt of label
+      | CmpNe of label
+      | Div
+      | GetStatic of string * java_type
+      | GoTo of label
+      | IReturn
+      | IfEq of label
+      | IfGe of label
+      | IfGt of label
+      | IfLe of label
+      | IfLt of label
+      | IfNe of label
+      | Increase of int * int
+      | IntConst of int
+      | InvokeNonVirtual of string * java_type list * java_type
+      | InvokeStatic of string * java_type list * java_type
+      | InvokeVirtual of string * java_type list * java_type
+      | Label of label
+      | Load of int
+      | Mul
+      | Neg
+      | Rem
+      | Return
+      | Store of int
+      | StrConst of string
+      | Sub
+    type code = inst list
+    val intToString : int -> string
+    val conv_type : java_type -> string
+    val conv_args : java_type list -> string
+    val conv_inst : inst -> string
+    val optimize : inst list -> inst list
+  end
+structure Output :
+  sig
+    structure B : <sig>
+    exception NotSupported
+    datatype proceedure
+      = Function of string * Bytecode.java_type list * Bytecode.java_type * 
+                    int * int * Bytecode.inst list
+      | Raw of string * string
+    datatype pool = Pool of TextIO.outstream * proceedure list
+    val init_pool : TextIO.outstream -> pool
+    val push : Bytecode.inst -> proceedure -> proceedure
+    val store : proceedure -> pool -> pool
+    val indent_inst : Bytecode.inst -> string
+    val header : string
+    val conv_proc : proceedure -> string
+    val flush : pool -> unit
+  end
+structure Emitter :
+  sig
+    structure A : <sig>
+    structure T : <sig>
+    structure B : <sig>
+    structure O : <sig>
+    exception InternalError
+    val out : Bytecode.inst list ref
+    val push : Bytecode.inst -> unit
+    val label : int ref
+    val incLabel : unit -> int
+    val conv_label : int -> string
+    val init : unit -> unit
+    val push_label : int -> unit
+    val push_goto : int -> unit
+    val emit_dec : Ast.dec -> Table.entry list -> Table.entry list
+    val emit_stmt : Ast.stmt -> Table.entry list -> unit
+    val emit_expr : Ast.expr -> Table.entry list -> int -> unit
+    val generate : Ast.stmt -> Bytecode.inst list
+    val emit_optimize : Ast.stmt -> TextIO.outstream -> unit
+    val emit : Ast.stmt -> TextIO.outstream -> unit
+  end
+val err = fn : TextIO.vector -> unit
+val main = fn : string * string list -> OS.Process.status
+val debug = fn : unit -> unit
+- debug();
+{int a; a = 1; a = a; iprint(a); }$
+--- AST:
+Block[ Dec[ a ]Def(a,Num 1) Def(a,Var a) Iprint(Var a) ]
+
+--- Optimized AST
+Block[ Dec[ a ]Def(a,Num 1) Def(a,Var a) Iprint(Var a) ]
+
+--- Java Bytecode:
+.class synchronized Aout
+.super java/lang/Object
+.method <init>()V
+	.limit locals 1
+	.limit stack 1
+	aload_0
+	invokenonvirtual java/lang/Object.<init>()V
+	return
+.end method
+
+.method public static main([Ljava/lang/String;)V
+	.limit locals 2
+	.limit stack 2
+	iconst_1
+	istore_0
+	iload_0
+	istore_0
+	getstatic java/lang/System/out Ljava/io/PrintStream;
+	iload_0
+	invokevirtual java/io/PrintStream/print(I)V
+	return
+.end method
+
+
+
+--- Optimized Java Bytecode:
+.class synchronized Aout
+.super java/lang/Object
+.method <init>()V
+	.limit locals 1
+	.limit stack 1
+	aload_0
+	invokenonvirtual java/lang/Object.<init>()V
+	return
+.end method
+
+.method public static main([Ljava/lang/String;)V
+	.limit locals 2
+	.limit stack 2
+	iconst_1
+	istore_0
+	getstatic java/lang/System/out Ljava/io/PrintStream;
+	iload_0
+	invokevirtual java/io/PrintStream/print(I)V
+	return
+.end method
+
+val it = () : unit
+- - 
