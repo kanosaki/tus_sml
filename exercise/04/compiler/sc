@@ -1,2 +1,14 @@
 #!/bin/sh
-sml @SMLload=sc.x86-darwin $* && java Aout
+binary=`find . -d 1 -name "sc.*"`
+if [[ -z ${binary} ]]; then
+    echo "Binary not found"
+    exit 1
+fi
+if [[ $1 = "-i" ]]; then
+    immed_exec=1
+    shift 1
+fi
+sml @SMLload=sc.x86-darwin $*
+if [[ ${immed_exec} ]]; then
+    java Aout
+fi

@@ -1043,7 +1043,7 @@ let
             in
               Emitter.emit_optimize ast ostream;
               TextIO.closeOut ostream;
-              OS.Process.system "jasmin tmp.j"
+              OS.Process.system "java -jar ./jasmin.jar tmp.j"
             end 
             handle 
               (Parser.SyntaxError msg) => (print (msg^"\n"); OS.Process.failure)
