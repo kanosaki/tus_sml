@@ -8,7 +8,7 @@ if [[ $1 = "-i" ]]; then
     immed_exec=1
     shift 1
 fi
-sml @SMLload=sc.x86-darwin $*
+sml @SMLload=${binary} $*
 if [[ ${immed_exec} ]]; then
     java Aout
 fi
