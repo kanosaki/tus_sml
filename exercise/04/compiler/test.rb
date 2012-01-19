@@ -108,7 +108,7 @@ class Case
   end
 
   def run
-    IO.popen("./sc #{@sim_path}", "r+") do |io|
+    IO.popen("./sc -i #{@sim_path}", "r+") do |io|
       self.talker.start(io)
     end
   end
